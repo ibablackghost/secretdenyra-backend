@@ -1,0 +1,33 @@
+{
+  "kind": "singleType",
+  "collectionName": "home",
+  "info": {
+    "singularName": "home",
+    "pluralName": "homes",
+    "displayName": "Home",
+    "description": "Contenus éditoriaux page d’accueil"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "heroTitle": {
+      "type": "richtext"
+    },
+    "heroSubtitle": {
+      "type": "text"
+    },
+    "heroImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "promoTitle": {
+      "type": "string"
+    },
+    "promoBody": {
+      "type": "text"
+    }
+  }
+}

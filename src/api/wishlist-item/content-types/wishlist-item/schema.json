@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "wishlist_items",
+  "info": {
+    "singularName": "wishlist-item",
+    "pluralName": "wishlist-items",
+    "displayName": "Wishlist item",
+    "description": "Entrée liste de souhaits (utilisateur authentifié)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product",
+      "required": true
+    }
+  }
+}
