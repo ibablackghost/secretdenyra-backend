@@ -1,0 +1,9 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Nyra CMS",
+    "description": "Spec minimale de secours. Remplace-la en lançant : npm run openapi:generate",
+    "version": "0.0.0"
+  },
+  "paths": {}
+}

@@ -15,6 +15,8 @@ const config: Core.Config.Middlewares = [
       contentSecurityPolicy: {
         useDefaults: true,
         directives: {
+          'script-src': ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
+          'style-src': ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
           'connect-src': ["'self'", 'https:', ...corsOrigins],
           'img-src': [
             "'self'",
