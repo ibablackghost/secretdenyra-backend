@@ -46,14 +46,6 @@
       "multiple": false,
       "allowedTypes": ["images"]
     },
-    "gallery": {
-      "type": "media",
-      "multiple": true,
-      "allowedTypes": ["images"]
-    },
-    "description": {
-      "type": "richtext"
-    },
     "category": {
       "type": "relation",
       "relation": "manyToOne",
