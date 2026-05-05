@@ -22,6 +22,7 @@ async function grantPublicCatalogPermissions(strapi: Core.Strapi) {
 
   enable('api::category', 'category', ['find', 'findOne']);
   enable('api::product', 'product', ['find', 'findOne']);
+  enable('api::tag', 'tag', ['find', 'findOne']);
 
   await strapi.plugin('users-permissions').service('role').updateRole(publicRole.id, {
     name: roleData.name,
@@ -29,14 +30,14 @@ async function grantPublicCatalogPermissions(strapi: Core.Strapi) {
     permissions: roleData.permissions,
   });
 
-  strapi.log.info('[nyra-catalog] Rôle Public : find / findOne pour category et product.');
+  strapi.log.info('[nyra-catalog] Role Public: find/findOne sur product, category et tag.');
 }
 
 export async function seedNyraCatalog(strapi: Core.Strapi) {
   try {
     await grantPublicCatalogPermissions(strapi);
-    strapi.log.info('[nyra-catalog] Auto-permissions OK. Aucun seed de données fictives n’est injecté.');
+    strapi.log.info('[nyra-catalog] Permissions publiques appliquées. Aucun seed automatique (catégories/tags/produits).');
   } catch (err) {
-    strapi.log.error('[nyra-catalog] Échec configuration permissions.', err);
+    strapi.log.error('[nyra-catalog] Échec de la configuration des permissions catalogue.', err);
   }
 }

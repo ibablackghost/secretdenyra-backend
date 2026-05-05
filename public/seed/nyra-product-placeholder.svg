@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+<rect width="1200" height="1200" fill="#f4f1ea"/>
+<rect x="120" y="120" width="960" height="960" rx="48" fill="#ded7c9"/>
+<text x="600" y="560" text-anchor="middle" font-size="64" fill="#594f43" font-family="Arial, sans-serif">Nyra</text>
+<text x="600" y="640" text-anchor="middle" font-size="36" fill="#6b6155" font-family="Arial, sans-serif">Product Image</text>
+</svg>

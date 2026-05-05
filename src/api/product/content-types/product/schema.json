@@ -19,10 +19,12 @@
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": true,
+      "unique": true
     },
     "ingredients": {
-      "type": "text"
+      "type": "text",
+      "required": true
     },
     "price": {
       "type": "integer",
@@ -31,10 +33,12 @@
     },
     "rating": {
       "type": "decimal",
+      "required": true,
       "default": 0
     },
     "reviews": {
       "type": "integer",
+      "required": true,
       "default": 0,
       "min": 0
     },
@@ -44,12 +48,20 @@
     "image": {
       "type": "media",
       "multiple": false,
+      "required": true,
       "allowedTypes": ["images"]
     },
     "category": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::category.category",
+      "required": true,
+      "inversedBy": "products"
+    },
+    "tags": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::tag.tag",
       "inversedBy": "products"
     }
   }
