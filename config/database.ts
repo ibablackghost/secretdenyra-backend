@@ -2,7 +2,15 @@ import path from 'path';
 import type { Core } from '@strapi/strapi';
 
 const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database => {
-  const client = env('DATABASE_CLIENT', 'sqlite');
+  // Auto-detect PostgreSQL when Railway (or any PG*) environment variables are present.
+  // Explicit DATABASE_CLIENT always takes precedence; otherwise fall back to SQLite for
+  // local development.
+  const isPostgres =
+    env('DATABASE_CLIENT', null) === 'postgres' ||
+    !!env('DATABASE_URL', null) ||
+    !!env('PGHOST', null);
+
+  const client = isPostgres ? 'postgres' : env('DATABASE_CLIENT', 'sqlite');
 
   const connections = {
     mysql: {
@@ -25,12 +33,14 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
     },
     postgres: {
       connection: {
-        connectionString: env('DATABASE_URL'),
-        host: env('DATABASE_HOST', 'localhost'),
-        port: env.int('DATABASE_PORT', 5432),
-        database: env('DATABASE_NAME', 'strapi'),
-        user: env('DATABASE_USERNAME', 'strapi'),
-        password: env('DATABASE_PASSWORD', 'strapi'),
+        // Prefer DATABASE_URL (Railway injects this automatically); fall back to
+        // individual PG* variables that Railway also provides.
+        connectionString: env('DATABASE_URL', null) ?? undefined,
+        host: env('DATABASE_HOST', env('PGHOST', 'localhost')),
+        port: env.int('DATABASE_PORT', env.int('PGPORT', 5432)),
+        database: env('DATABASE_NAME', env('PGDATABASE', 'strapi')),
+        user: env('DATABASE_USERNAME', env('PGUSER', 'strapi')),
+        password: env('DATABASE_PASSWORD', env('PGPASSWORD', 'strapi')),
         ssl: env.bool('DATABASE_SSL', false) && {
           key: env('DATABASE_SSL_KEY', undefined),
           cert: env('DATABASE_SSL_CERT', undefined),
