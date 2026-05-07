@@ -4,7 +4,7 @@ import type { Core } from '@strapi/strapi';
 const corsOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://secretdenyra-frontend.vercel.app/',
+  'https://secretdenyra-frontend.vercel.app',
 ];
 
 const config: Core.Config.Middlewares = [
