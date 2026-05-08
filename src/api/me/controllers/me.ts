@@ -109,6 +109,22 @@ const wishlistPopulate = {
   },
 };
 
+const publicWishlistItem = (item: any) => ({
+  id: String(item.documentId ?? item.id),
+  product: publicCartProduct(item.product),
+});
+
+const wishlistPayload = (items: any[]) => {
+  const publicItems = items.map(publicWishlistItem);
+
+  return {
+    items: publicItems,
+    products: publicItems.map((item) => item.product).filter(Boolean),
+    productIds: publicItems.map((item) => item.product?.id).filter(Boolean),
+    count: publicItems.length,
+  };
+};
+
 const productCardPopulate = {
   image: { fields: ['url', 'alternativeText', 'width', 'height', 'formats'] },
   category: { fields: ['name', 'slug'] },
@@ -313,13 +329,7 @@ export default {
       orderBy: [{ createdAt: 'desc' }],
     });
 
-    ctx.body = {
-      items: items.map((item: any) => ({
-        id: String(item.documentId ?? item.id),
-        product: publicCartProduct(item.product),
-      })),
-      count: items.length,
-    };
+    ctx.body = wishlistPayload(items);
   },
 
   async addWishlistItem(ctx: any) {
@@ -339,13 +349,19 @@ export default {
       },
     });
 
-    if (!existing) {
-      await strapi.db.query('api::wishlist-item.wishlist-item').create({
+    const item =
+      existing ??
+      (await strapi.db.query('api::wishlist-item.wishlist-item').create({
         data: { user: user.id, product: product.id },
-      });
-    }
+        populate: wishlistPopulate,
+      }));
 
-    ctx.body = { added: !existing };
+    ctx.body = {
+      item: publicWishlistItem(existing ? { ...existing, product } : item),
+      products: [publicCartProduct(product)].filter(Boolean),
+      productIds: [publicCartProduct(product)?.id].filter(Boolean),
+      added: !existing,
+    };
   },
 
   async deleteWishlistItem(ctx: any) {
@@ -366,7 +382,16 @@ export default {
       if (item) await strapi.db.query('api::wishlist-item.wishlist-item').delete({ where: { id: item.id } });
     }
 
-    ctx.body = { removed: true };
+    const items = await strapi.db.query('api::wishlist-item.wishlist-item').findMany({
+      where: { user: { id: user.id } },
+      populate: wishlistPopulate,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    ctx.body = {
+      removed: true,
+      ...wishlistPayload(items),
+    };
   },
 
   async viewedProducts(ctx: any) {

@@ -16,6 +16,17 @@ const publicWishlistItem = (item: any) => ({
   product: publicCartProduct(item.product),
 });
 
+const wishlistPayload = (items: any[]) => {
+  const publicItems = items.map(publicWishlistItem);
+
+  return {
+    items: publicItems,
+    products: publicItems.map((item) => item.product).filter(Boolean),
+    productIds: publicItems.map((item) => item.product?.id).filter(Boolean),
+    count: publicItems.length,
+  };
+};
+
 export default factories.createCoreController('api::wishlist-item.wishlist-item', ({ strapi }) => ({
   async list(ctx: any) {
     const user = requireUser(ctx);
@@ -27,10 +38,7 @@ export default factories.createCoreController('api::wishlist-item.wishlist-item'
       orderBy: [{ createdAt: 'desc' }],
     });
 
-    ctx.body = {
-      items: items.map(publicWishlistItem),
-      count: items.length,
-    };
+    ctx.body = wishlistPayload(items);
   },
 
   async addItem(ctx: any) {
@@ -69,6 +77,8 @@ export default factories.createCoreController('api::wishlist-item.wishlist-item'
 
     ctx.body = {
       item: publicWishlistItem(item),
+      products: [publicCartProduct(item.product)].filter(Boolean),
+      productIds: [publicCartProduct(item.product)?.id].filter(Boolean),
       added: !existing,
     };
   },
@@ -94,6 +104,15 @@ export default factories.createCoreController('api::wishlist-item.wishlist-item'
       }
     }
 
-    ctx.body = { removed: true };
+    const items = await strapi.db.query('api::wishlist-item.wishlist-item').findMany({
+      where: { user: { id: user.id } },
+      populate: wishlistPopulate,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    ctx.body = {
+      removed: true,
+      ...wishlistPayload(items),
+    };
   },
 }));
