@@ -31,6 +31,10 @@
       "required": true,
       "min": 0
     },
+    "compareAtPrice": {
+      "type": "integer",
+      "min": 0
+    },
     "rating": {
       "type": "decimal",
       "required": true,
@@ -42,6 +46,25 @@
       "default": 0,
       "min": 0
     },
+    "metaTitle": {
+      "type": "string",
+      "maxLength": 70
+    },
+    "metaDescription": {
+      "type": "text",
+      "maxLength": 180
+    },
+    "canonicalUrl": {
+      "type": "string"
+    },
+    "canonicalPath": {
+      "type": "string"
+    },
+    "ogImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
     "bgClass": {
       "type": "string"
     },
@@ -49,6 +72,11 @@
       "type": "media",
       "multiple": false,
       "required": true,
+      "allowedTypes": ["images"]
+    },
+    "gallery": {
+      "type": "media",
+      "multiple": true,
       "allowedTypes": ["images"]
     },
     "category": {
@@ -63,6 +91,12 @@
       "relation": "manyToMany",
       "target": "api::tag.tag",
       "inversedBy": "products"
+    },
+    "variants": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::variant.variant",
+      "mappedBy": "product"
     }
   }
 }

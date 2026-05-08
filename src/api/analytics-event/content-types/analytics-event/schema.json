@@ -1,0 +1,69 @@
+{
+  "kind": "collectionType",
+  "collectionName": "analytics_events",
+  "info": {
+    "singularName": "analytics-event",
+    "pluralName": "analytics-events",
+    "displayName": "Analytics event",
+    "description": "Evenement analytics first-party"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "eventName": {
+      "type": "string",
+      "required": true
+    },
+    "checkoutSessionId": {
+      "type": "string"
+    },
+    "orderId": {
+      "type": "string"
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "cartHash": {
+      "type": "string"
+    },
+    "step": {
+      "type": "integer",
+      "min": 1
+    },
+    "reason": {
+      "type": "string"
+    },
+    "dedupeKey": {
+      "type": "string",
+      "unique": true
+    },
+    "dedupeBucket": {
+      "type": "integer",
+      "min": 0
+    },
+    "currency": {
+      "type": "string",
+      "default": "XOF"
+    },
+    "value": {
+      "type": "integer",
+      "min": 0
+    },
+    "payload": {
+      "type": "json"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "userAgent": {
+      "type": "text"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

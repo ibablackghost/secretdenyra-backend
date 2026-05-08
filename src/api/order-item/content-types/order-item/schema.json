@@ -1,0 +1,74 @@
+{
+  "kind": "collectionType",
+  "collectionName": "order_items",
+  "info": {
+    "singularName": "order-item",
+    "pluralName": "order-items",
+    "displayName": "Order item",
+    "description": "Snapshot commercial d'une ligne commande"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "productName": {
+      "type": "string",
+      "required": true
+    },
+    "productSlug": {
+      "type": "string",
+      "required": true
+    },
+    "productDocumentId": {
+      "type": "string"
+    },
+    "categoryName": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string",
+      "required": true,
+      "default": "XOF"
+    },
+    "variantLabel": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string",
+      "required": true
+    },
+    "quantity": {
+      "type": "integer",
+      "required": true,
+      "min": 1
+    },
+    "unitPrice": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "lineTotal": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+    "variant": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::variant.variant"
+    },
+    "order": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::order.order",
+      "required": true,
+      "inversedBy": "items"
+    }
+  }
+}

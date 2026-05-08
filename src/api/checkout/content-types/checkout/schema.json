@@ -1,0 +1,82 @@
+{
+  "kind": "collectionType",
+  "collectionName": "checkouts",
+  "info": {
+    "singularName": "checkout",
+    "pluralName": "checkouts",
+    "displayName": "Checkout",
+    "description": "Brouillon checkout avant paiement"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "checkoutId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "payment_pending", "paid", "expired", "cancelled"],
+      "required": true,
+      "default": "draft"
+    },
+    "customer": {
+      "type": "json",
+      "required": true
+    },
+    "shippingAddress": {
+      "type": "json",
+      "required": true
+    },
+    "billingAddress": {
+      "type": "json"
+    },
+    "billingSameAsShipping": {
+      "type": "boolean",
+      "default": true
+    },
+    "currency": {
+      "type": "string",
+      "required": true,
+      "default": "XOF"
+    },
+    "subtotal": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "min": 0
+    },
+    "shipping": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "min": 0
+    },
+    "total": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "min": 0
+    },
+    "paymentIntentId": {
+      "type": "string"
+    },
+    "clientSecret": {
+      "type": "string",
+      "private": true
+    },
+    "expiresAt": {
+      "type": "datetime",
+      "required": true
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    }
+  }
+}

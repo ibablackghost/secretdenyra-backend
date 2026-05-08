@@ -1,0 +1,89 @@
+{
+  "kind": "collectionType",
+  "collectionName": "variants",
+  "info": {
+    "singularName": "variant",
+    "pluralName": "variants",
+    "displayName": "Variant",
+    "description": "Variantes vendables d'un produit Nyra"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "sku": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "format": {
+      "type": "string",
+      "required": true
+    },
+    "label": {
+      "type": "string"
+    },
+    "size": {
+      "type": "string"
+    },
+    "colorName": {
+      "type": "string"
+    },
+    "colorHex": {
+      "type": "string"
+    },
+    "weightValue": {
+      "type": "decimal",
+      "min": 0
+    },
+    "weightUnit": {
+      "type": "enumeration",
+      "enum": ["g", "kg", "ml", "l", "piece"],
+      "default": "g"
+    },
+    "price": {
+      "type": "integer",
+      "min": 0
+    },
+    "compareAtPrice": {
+      "type": "integer",
+      "min": 0
+    },
+    "stock": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "min": 0
+    },
+    "lowStockThreshold": {
+      "type": "integer",
+      "default": 5,
+      "min": 0
+    },
+    "isDefault": {
+      "type": "boolean",
+      "default": false
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "position": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product",
+      "required": true,
+      "inversedBy": "variants"
+    }
+  }
+}

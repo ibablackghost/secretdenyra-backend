@@ -8,7 +8,9 @@ const corsOrigins = [
 ];
 
 const config: Core.Config.Middlewares = [
+  'global::nyra-request-context',
   'strapi::logger',
+  'global::nyra-errors',
   'strapi::errors',
   {
     name: 'strapi::security',
@@ -40,6 +42,7 @@ const config: Core.Config.Middlewares = [
   'strapi::poweredBy',
   'strapi::query',
   'strapi::body',
+  'global::nyra-cache-control',
   'strapi::session',
   'strapi::favicon',
   'strapi::public',
