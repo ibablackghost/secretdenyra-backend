@@ -405,10 +405,14 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
     });
 
     ctx.body = {
+      checkoutId: checkout.checkoutId,
+      checkout_session_id: checkout.checkoutId,
       provider: 'stripe',
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
       status: paymentIntent.status,
+      amount: summary.total,
+      currency,
     };
   },
 

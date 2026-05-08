@@ -35,6 +35,16 @@ const addressPayload = (address: any) => ({
   isDefault: Boolean(address.isDefault),
 });
 
+const addressesPayload = (addresses: any[]) => {
+  const publicAddresses = addresses.map(addressPayload);
+
+  return {
+    addresses: publicAddresses,
+    items: publicAddresses,
+    count: publicAddresses.length,
+  };
+};
+
 const sanitizeAddressInput = (body: any) => ({
   label: String(body?.label ?? '').trim(),
   line1: String(body?.line1 ?? '').trim(),
@@ -57,6 +67,7 @@ const validateAddress = (address: any) => {
 const orderSummaryPayload = (order: any) => ({
   id: order.orderNumber,
   technicalId: String(order.documentId ?? order.id),
+  orderNumber: order.orderNumber,
   createdAt: order.createdAt,
   status: order.status,
   total: order.total,
@@ -109,6 +120,8 @@ const wishlistPopulate = {
   },
 };
 
+const PURCHASED_ORDER_STATUSES = ['paid', 'shipped', 'delivered'];
+
 const publicWishlistItem = (item: any) => ({
   id: String(item.documentId ?? item.id),
   product: publicCartProduct(item.product),
@@ -122,6 +135,126 @@ const wishlistPayload = (items: any[]) => {
     products: publicItems.map((item) => item.product).filter(Boolean),
     productIds: publicItems.map((item) => item.product?.id).filter(Boolean),
     count: publicItems.length,
+  };
+};
+
+const viewedProductsPayload = (items: any[]) => {
+  const publicItems = items
+    .map((item: any) => ({
+      id: String(item.documentId ?? item.id),
+      viewedAt: item.viewedAt,
+      product: publicCartProduct(item.product),
+    }))
+    .filter((item: any) => Boolean(item.product));
+
+  return {
+    items: publicItems,
+    products: publicItems.map((item: any) => item.product),
+    productIds: publicItems.map((item: any) => item.product.id),
+    count: publicItems.length,
+  };
+};
+
+const purchasedProductFallback = (item: any) => ({
+  id: item.productDocumentId ?? item.productSlug,
+  slug: item.productSlug,
+  name: item.productName,
+  price: item.unitPrice,
+  currency: item.currency,
+  compareAtPrice: null,
+  image: null,
+  category: item.categoryName
+    ? {
+        id: item.categoryName,
+        slug: item.categoryName,
+        name: item.categoryName,
+      }
+    : null,
+  analytics: {
+    item_id: item.productDocumentId ?? item.productSlug,
+    item_name: item.productName,
+    item_category: item.categoryName ?? null,
+    price: item.unitPrice,
+    currency: item.currency,
+  },
+});
+
+const purchasedProductsPayload = (items: any[]) => {
+  const byProduct = new Map<string, any>();
+
+  for (const item of items) {
+    const product = publicCartProduct(item.product) ?? purchasedProductFallback(item);
+    if (!product?.id) continue;
+
+    const key = product.id;
+    const order = item.order;
+    const purchasedAt = order?.createdAt ?? item.createdAt;
+    const existing = byProduct.get(key);
+
+    if (!existing) {
+      byProduct.set(key, {
+        product,
+        productId: product.id,
+        productSlug: product.slug,
+        productName: product.name,
+        totalQuantity: item.quantity ?? 0,
+        totalSpent: item.lineTotal ?? 0,
+        currency: item.currency ?? order?.currency,
+        lastPurchasedAt: purchasedAt,
+        lastOrderId: order?.orderNumber ?? String(order?.documentId ?? order?.id ?? ''),
+        orderCount: order?.id ? 1 : 0,
+        orders: order
+          ? [
+              {
+                id: order.orderNumber,
+                technicalId: String(order.documentId ?? order.id),
+                status: order.status,
+                purchasedAt,
+                quantity: item.quantity ?? 0,
+                lineTotal: item.lineTotal ?? 0,
+              },
+            ]
+          : [],
+      });
+      continue;
+    }
+
+    existing.totalQuantity += item.quantity ?? 0;
+    existing.totalSpent += item.lineTotal ?? 0;
+    if (purchasedAt && new Date(purchasedAt).getTime() > new Date(existing.lastPurchasedAt ?? 0).getTime()) {
+      existing.lastPurchasedAt = purchasedAt;
+      existing.lastOrderId = order?.orderNumber ?? existing.lastOrderId;
+    }
+
+    const existingOrderEntry = order
+      ? existing.orders.find((entry: any) => entry.technicalId === String(order.documentId ?? order.id))
+      : null;
+
+    if (existingOrderEntry) {
+      existingOrderEntry.quantity += item.quantity ?? 0;
+      existingOrderEntry.lineTotal += item.lineTotal ?? 0;
+    } else if (order) {
+      existing.orderCount += 1;
+      existing.orders.push({
+        id: order.orderNumber,
+        technicalId: String(order.documentId ?? order.id),
+        status: order.status,
+        purchasedAt,
+        quantity: item.quantity ?? 0,
+        lineTotal: item.lineTotal ?? 0,
+      });
+    }
+  }
+
+  const products = Array.from(byProduct.values()).sort(
+    (a, b) => new Date(b.lastPurchasedAt ?? 0).getTime() - new Date(a.lastPurchasedAt ?? 0).getTime(),
+  );
+
+  return {
+    items: products,
+    products: products.map((entry) => entry.product),
+    productIds: products.map((entry) => entry.productId),
+    count: products.length,
   };
 };
 
@@ -193,7 +326,7 @@ export default {
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
 
-    ctx.body = { addresses: addresses.map(addressPayload) };
+    ctx.body = addressesPayload(addresses);
   },
 
   async createAddress(ctx: any) {
@@ -289,6 +422,8 @@ export default {
 
     ctx.body = {
       orders: orders.map(orderSummaryPayload),
+      items: orders.map(orderSummaryPayload),
+      count: total,
       pagination: {
         page,
         pageSize,
@@ -317,6 +452,29 @@ export default {
 
     if (!order) return businessError(ctx, 404, 'ORDER_NOT_FOUND', 'Commande introuvable.');
     ctx.body = { order: orderDetailPayload(order) };
+  },
+
+  async purchasedProducts(ctx: any) {
+    const user = requireUser(ctx);
+    if (!user) return;
+
+    const pageSize = toPositiveInt(ctx.query?.pageSize, 100, 200);
+    const items = await strapi.db.query('api::order-item.order-item').findMany({
+      where: {
+        order: {
+          user: { id: user.id },
+          status: { $in: PURCHASED_ORDER_STATUSES },
+        },
+      },
+      populate: {
+        product: { populate: productCardPopulate },
+        order: true,
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      limit: pageSize,
+    });
+
+    ctx.body = purchasedProductsPayload(items);
   },
 
   async wishlist(ctx: any) {
@@ -405,12 +563,7 @@ export default {
       limit: 20,
     });
 
-    ctx.body = {
-      products: items.map((item: any) => ({
-        viewedAt: item.viewedAt,
-        product: publicCartProduct(item.product),
-      })),
-    };
+    ctx.body = viewedProductsPayload(items);
   },
 
   async addViewedProduct(ctx: any) {

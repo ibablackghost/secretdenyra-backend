@@ -80,6 +80,7 @@ Figer les contrats API nécessaires au frontend RC pour un e-commerce fiable (ca
 - `GET /api/me`
 - `GET /api/me/orders`
 - `GET /api/me/orders/:id`
+- `GET /api/me/purchased-products`
 - `GET /api/me/addresses`
 - `POST /api/me/addresses`
 - `PUT /api/me/addresses/:id`
@@ -91,6 +92,7 @@ Figer les contrats API nécessaires au frontend RC pour un e-commerce fiable (ca
 
 - identité JWT fiable (aucune donnée croisée entre comptes)
 - tri des commandes (plus récente -> plus ancienne)
+- produits achetés disponibles dans le compte depuis les commandes payées/expédiées/livrées
 - réponses compatibles avec les vues frontend dashboard/historique/adresses
 
 ---

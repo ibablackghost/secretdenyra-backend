@@ -70,6 +70,7 @@ async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
     'setDefaultAddress',
     'orders',
     'order',
+    'purchasedProducts',
     'wishlist',
     'addWishlistItem',
     'deleteWishlistItem',

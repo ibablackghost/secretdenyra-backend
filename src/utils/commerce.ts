@@ -7,7 +7,13 @@ export const CURRENCY = 'XOF';
 
 export const businessError = (ctx: AnyRecord, status: number, code: string, message: string, details?: AnyRecord) => {
   ctx.status = status;
-  ctx.body = details ? { code, message, details } : { code, message };
+  const requestId = ctx.state?.requestId;
+  ctx.body = {
+    code,
+    message,
+    ...(details ? { details } : {}),
+    ...(requestId ? { requestId } : {}),
+  };
 };
 
 export const requireUser = (ctx: AnyRecord) => {
@@ -139,9 +145,14 @@ export const cartSummary = (items: AnyRecord[]) => {
   const publicItems = items.map(publicCartItem);
   const subtotal = publicItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const shipping = subtotal === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
+  const productIds = publicItems.map((item) => item.product?.id).filter(Boolean);
+  const itemCount = publicItems.reduce((sum, item) => sum + item.quantity, 0);
 
   return {
     items: publicItems,
+    count: publicItems.length,
+    itemCount,
+    productIds,
     currency: CURRENCY,
     subtotal,
     shipping,

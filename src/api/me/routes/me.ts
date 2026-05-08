@@ -52,6 +52,11 @@ export default {
     },
     {
       method: 'GET',
+      path: '/me/purchased-products',
+      handler: 'me.purchasedProducts',
+    },
+    {
+      method: 'GET',
       path: '/me/wishlist',
       handler: 'me.wishlist',
     },

@@ -444,7 +444,23 @@ Address body:
 ```http
 GET /api/me/orders?page=1&pageSize=10
 GET /api/me/orders/:orderId
+GET /api/me/purchased-products
 ```
+
+`GET /api/me/purchased-products` sert a afficher dans le compte les produits deja achetes par l'utilisateur.
+
+Reponse:
+
+```json
+{
+  "items": [],
+  "products": [],
+  "productIds": [],
+  "count": 0
+}
+```
+
+Le frontend ne doit pas calculer cette section depuis un fichier local. Apres un checkout confirme, recharger les commandes et les produits achetes.
 
 ### Wishlist
 
