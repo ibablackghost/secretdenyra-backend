@@ -53,6 +53,7 @@ export default {
       const report = await importTisanesCsv(strapi, csvContent, {
         dryRun: ctx.request.body?.dryRun === 'true',
         importImages: ctx.request.body?.importImages !== 'false',
+        replaceCategory: ctx.request.body?.replaceCategory === 'true',
       });
 
       ctx.body = {

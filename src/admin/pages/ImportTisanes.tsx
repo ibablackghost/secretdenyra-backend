@@ -12,6 +12,8 @@ type ImportReport = {
   variantsUpdated: number;
   tagsCreated: number;
   tagsUpdated: number;
+  productsDeleted: number;
+  variantsDeleted: number;
   imagesImported: number;
   errors: Array<{ scope: string; message: string }>;
 };
@@ -49,6 +51,7 @@ const ImportTisanes = () => {
   const [file, setFile] = useState<File | null>(null);
   const [dryRun, setDryRun] = useState(false);
   const [importImages, setImportImages] = useState(true);
+  const [replaceCategory, setReplaceCategory] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -64,6 +67,8 @@ const ImportTisanes = () => {
             ['Produits mis à jour', report.productsUpdated],
             ['Variantes créées', report.variantsCreated],
             ['Variantes mises à jour', report.variantsUpdated],
+            ['Produits supprimés', report.productsDeleted],
+            ['Variantes supprimées', report.variantsDeleted],
             ['Images importées', report.imagesImported],
           ]
         : [],
@@ -86,6 +91,7 @@ const ImportTisanes = () => {
       formData.append('file', file);
       formData.append('dryRun', String(dryRun));
       formData.append('importImages', String(importImages));
+      formData.append('replaceCategory', String(replaceCategory));
 
       const { post } = getFetchClient();
       const response = await post('/admin/import/tisanes', formData);
@@ -104,9 +110,10 @@ const ImportTisanes = () => {
           <p style={{ color: '#666687', fontSize: 13, fontWeight: 700, margin: 0, textTransform: 'uppercase' }}>
             Catalogue Nyra
           </p>
-          <h1 style={{ color: '#212134', fontSize: 32, margin: '6px 0 8px' }}>Import CSV Tisanes</h1>
+          <h1 style={{ color: '#212134', fontSize: 32, margin: '6px 0 8px' }}>Import CSV Produits</h1>
           <p style={{ color: '#666687', fontSize: 16, margin: 0 }}>
-            Dépose un fichier CSV WooCommerce enrichi pour créer ou mettre à jour les produits, variantes, tags et images.
+            Dépose un fichier CSV WooCommerce enrichi pour créer ou mettre à jour une catégorie de produits, ses variantes,
+            tags et images.
           </p>
         </header>
 
@@ -130,7 +137,19 @@ const ImportTisanes = () => {
                 <input checked={importImages} onChange={(event) => setImportImages(event.target.checked)} type="checkbox" />
                 Importer les images externes
               </label>
+
+              <label style={{ alignItems: 'center', display: 'flex', gap: 8 }}>
+                <input checked={replaceCategory} onChange={(event) => setReplaceCategory(event.target.checked)} type="checkbox" />
+                Remplacer la catégorie du CSV
+              </label>
             </div>
+
+            {replaceCategory ? (
+              <div style={{ background: '#fff4e5', borderRadius: 8, color: '#7c4a03', marginBottom: 20, padding: 14 }}>
+                Attention : cette option supprime définitivement les produits et variantes de la catégorie détectée dans le CSV
+                avant de recréer uniquement cette catégorie.
+              </div>
+            ) : null}
 
             <button disabled={isLoading} style={{ ...buttonStyle, opacity: isLoading ? 0.65 : 1 }} type="submit">
               {isLoading ? 'Import en cours...' : 'Lancer l’import'}

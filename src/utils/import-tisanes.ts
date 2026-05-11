@@ -7,6 +7,7 @@ type AnyRecord = Record<string, any>;
 type ImportOptions = {
   dryRun?: boolean;
   importImages?: boolean;
+  replaceCategory?: boolean;
 };
 
 type ImportReport = {
@@ -20,6 +21,8 @@ type ImportReport = {
   variantsUpdated: number;
   tagsCreated: number;
   tagsUpdated: number;
+  productsDeleted: number;
+  variantsDeleted: number;
   imagesImported: number;
   errors: Array<{ scope: string; message: string }>;
 };
@@ -121,6 +124,8 @@ const createReport = (dryRun: boolean): ImportReport => ({
   variantsUpdated: 0,
   tagsCreated: 0,
   tagsUpdated: 0,
+  productsDeleted: 0,
+  variantsDeleted: 0,
   imagesImported: 0,
   errors: [],
 });
@@ -252,6 +257,17 @@ const uploadImage = async (strapi: any, report: ImportReport, cache: Map<string,
   return null;
 };
 
+const localMediaFileExists = (media?: AnyRecord | null) => {
+  const url = media?.url;
+  if (!url || typeof url !== 'string') return false;
+
+  // External providers keep files outside this app, so the DB relation is enough.
+  if (!url.startsWith('/uploads/')) return true;
+
+  const relativePath = url.replace(/^\/+/, '').replace(/\//g, path.sep);
+  return fs.existsSync(path.join(process.cwd(), 'public', relativePath));
+};
+
 const ensureTag = async (strapi: any, report: ImportReport, cache: Map<string, AnyRecord>, tagName: string) => {
   const slug = slugify(tagName);
   if (cache.has(slug)) return cache.get(slug);
@@ -274,11 +290,35 @@ const ensureTag = async (strapi: any, report: ImportReport, cache: Map<string, A
   return tag;
 };
 
+const titleCase = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`)
+    .join(' ');
+
+const categoryNameFor = (value: unknown) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 'Catalogue';
+
+  return titleCase(raw.replace(/[_-]+/g, ' ').replace(/^nos\s+/i, '').trim());
+};
+
 const categoryPresetFor = (value: unknown) => {
   const raw = String(value ?? '').trim();
-  const normalized = stripAccents(raw).toLowerCase();
+  const normalized = stripAccents(raw).toLowerCase().replace(/[_-]+/g, ' ');
 
-  if (normalized.includes('the') || normalized.includes('tea')) {
+  if (normalized.includes('tisane')) {
+    return {
+      name: 'Tisanes',
+      slug: 'tisanes',
+      metaTitle: 'Tisanes bio | Nyra',
+      metaDescription: 'Découvrez les tisanes bio Nyra en vrac, disponibles en plusieurs formats.',
+      canonicalPath: '/collections/tisanes',
+    };
+  }
+
+  if (/\b(the|thes|tea)\b/.test(normalized)) {
     return {
       name: 'Thés bio',
       slug: 'thes-bio',
@@ -288,12 +328,15 @@ const categoryPresetFor = (value: unknown) => {
     };
   }
 
+  const name = categoryNameFor(raw);
+  const slug = slugify(name);
+
   return {
-    name: 'Tisanes',
-    slug: 'tisanes',
-    metaTitle: 'Tisanes bio | Nyra',
-    metaDescription: 'Découvrez les tisanes bio Nyra en vrac, disponibles en plusieurs formats.',
-    canonicalPath: '/collections/tisanes',
+    name,
+    slug,
+    metaTitle: `${name} | Nyra`,
+    metaDescription: `Découvrez la sélection ${name.toLowerCase()} Nyra, disponible en plusieurs formats.`,
+    canonicalPath: `/collections/${slug}`,
   };
 };
 
@@ -314,6 +357,47 @@ const ensureCategory = async (strapi: any, report: ImportReport, cache: Map<stri
 
   cache.set(preset.slug, category);
   return category;
+};
+
+const deleteDocumentOrEntity = async (strapi: any, uid: string, entity: AnyRecord) => {
+  if (entity?.documentId) {
+    await strapi.documents(uid).delete({ documentId: entity.documentId });
+    return;
+  }
+
+  if (entity?.id) {
+    await strapi.db.query(uid).delete({ where: { id: entity.id } });
+  }
+};
+
+const replaceImportedCategory = async (strapi: any, report: ImportReport, records: AnyRecord[]) => {
+  const categoryValues = new Set(
+    records
+      .filter((record) => record.Type === 'variable')
+      .map((record) => categoryPresetFor(record['Strapi category'] || record.Categories).slug),
+  );
+
+  for (const categorySlug of categoryValues) {
+    const category = await findDocument(strapi, 'api::category.category', { slug: categorySlug });
+    if (!category?.id && !category?.documentId) continue;
+
+    const products = await strapi.db.query('api::product.product').findMany({
+      where: { category: { slug: categorySlug } },
+      populate: { variants: true },
+    });
+
+    for (const product of products) {
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+
+      for (const variant of variants) {
+        await deleteDocumentOrEntity(strapi, 'api::variant.variant', variant);
+        report.variantsDeleted += 1;
+      }
+
+      await deleteDocumentOrEntity(strapi, 'api::product.product', product);
+      report.productsDeleted += 1;
+    }
+  }
 };
 
 export const importTisanesCsv = async (strapi: any, csvContent: string, options: ImportOptions = {}) => {
@@ -345,6 +429,17 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
     return report;
   }
 
+  if (options.replaceCategory) {
+    if (report.dryRun) {
+      report.errors.push({
+        scope: 'replaceCategory',
+        message: 'Mode remplacement detecte en test a blanc: aucune suppression effectuee.',
+      });
+    } else {
+      await replaceImportedCategory(strapi, report, records);
+    }
+  }
+
   for (const variation of variations) {
     const list = variationsByParent.get(variation.Parent) ?? [];
     list.push(variation);
@@ -359,7 +454,7 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
       const productPrice = prices.length > 0 ? Math.min(...prices) : 0;
       const existingProduct = await findOne(strapi, 'api::product.product', { slug: parent.Slug }, { image: true });
       const imageId =
-        existingProduct?.image?.id ??
+        (localMediaFileExists(existingProduct?.image) ? existingProduct?.image?.id : null) ??
         (importImages ? await uploadImage(strapi, report, imageCache, parent.Images, parent['Image alt text']) : null);
       const tags = [];
 

@@ -12,7 +12,7 @@ export default {
       icon: ImportIcon,
       intlLabel: {
         id: 'import-tisanes.plugin.name',
-        defaultMessage: 'Import Tisanes',
+        defaultMessage: 'Import Produits CSV',
       },
       Component: () => import('./pages/ImportTisanes'),
       permissions: [],
@@ -21,7 +21,7 @@ export default {
 
     app.registerPlugin({
       id: 'import-tisanes',
-      name: 'Import Tisanes',
+      name: 'Import Produits CSV',
     });
   },
   bootstrap() {},
