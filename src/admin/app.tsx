@@ -8,7 +8,7 @@ export default {
   },
   register(app: StrapiApp) {
     app.addMenuLink({
-      to: '/plugins/import-tisanes',
+      to: 'plugins/import-tisanes',
       icon: ImportIcon,
       intlLabel: {
         id: 'import-tisanes.plugin.name',

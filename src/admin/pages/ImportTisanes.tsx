@@ -40,7 +40,10 @@ const statStyle = {
   padding: 16,
 };
 
-const formatError = (error: any) => error?.response?.data?.message ?? error?.message ?? 'Import impossible.';
+const formatError = (error: any) => {
+  const data = error?.response?.data;
+  return data?.message ?? data?.error?.message ?? error?.message ?? 'Import impossible.';
+};
 
 const ImportTisanes = () => {
   const [file, setFile] = useState<File | null>(null);

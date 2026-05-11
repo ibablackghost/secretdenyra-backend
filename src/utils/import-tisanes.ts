@@ -77,6 +77,7 @@ const parseCsv = (text: string) => {
 };
 
 const rowsToRecords = (rows: string[][]) => {
+  if (!rows[0]) return [];
   const headers = rows[0].map((header, index) => (index === 0 ? header.replace(/^\uFEFF/, '') : header));
   return rows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
 };
@@ -256,6 +257,19 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
   report.totalRows = records.length;
   report.productsFound = parents.length;
   report.variantsFound = variations.length;
+
+  if (records.length === 0) {
+    report.errors.push({ scope: 'csv', message: 'Le fichier CSV est vide.' });
+    return report;
+  }
+
+  if (parents.length === 0) {
+    report.errors.push({
+      scope: 'csv',
+      message: 'Aucun produit parent Type=variable trouve. Verifie que le CSV est bien un export WooCommerce enrichi.',
+    });
+    return report;
+  }
 
   for (const variation of variations) {
     const list = variationsByParent.get(variation.Parent) ?? [];
