@@ -373,7 +373,7 @@ const deleteDocumentOrEntity = async (strapi: any, uid: string, entity: AnyRecor
 const replaceImportedCategory = async (strapi: any, report: ImportReport, records: AnyRecord[]) => {
   const categoryValues = new Set(
     records
-      .filter((record) => record.Type === 'variable')
+      .filter((record) => record.Type === 'variable' || record.Type === 'simple')
       .map((record) => categoryPresetFor(record['Strapi category'] || record.Categories).slug),
   );
 
@@ -405,7 +405,7 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
   const importImages = options.importImages !== false;
   const rows = parseCsv(csvContent);
   const records = rowsToRecords(rows);
-  const parents = records.filter((record) => record.Type === 'variable');
+  const parents = records.filter((record) => record.Type === 'variable' || record.Type === 'simple');
   const variations = records.filter((record) => record.Type === 'variation');
   const variationsByParent = new Map<string, AnyRecord[]>();
   const tagCache = new Map<string, AnyRecord>();
@@ -424,7 +424,7 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
   if (parents.length === 0) {
     report.errors.push({
       scope: 'csv',
-      message: 'Aucun produit parent Type=variable trouve. Verifie que le CSV est bien un export WooCommerce enrichi.',
+      message: 'Aucun produit Type=variable ou Type=simple trouve. Verifie que le CSV est bien un export WooCommerce enrichi.',
     });
     return report;
   }
@@ -451,7 +451,7 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
       const category = await ensureCategory(strapi, report, categoryCache, parent['Strapi category'] || parent.Categories);
       const productVariations = variationsByParent.get(parent.SKU) ?? [];
       const prices = productVariations.map((variation) => parsePrice(variation['Regular price'])).filter((price) => price > 0);
-      const productPrice = prices.length > 0 ? Math.min(...prices) : 0;
+      const productPrice = prices.length > 0 ? Math.min(...prices) : parsePrice(parent['Regular price']);
       const existingProduct = await findOne(strapi, 'api::product.product', { slug: parent.Slug }, { image: true });
       const imageId =
         (localMediaFileExists(existingProduct?.image) ? existingProduct?.image?.id : null) ??
@@ -499,7 +499,22 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
         statusFor(parent.Status),
       );
 
-      for (const [index, variation] of productVariations.entries()) {
+      const variantsToImport =
+        productVariations.length > 0
+          ? productVariations
+          : [
+              {
+                Name: `${parent.Name} - Standard`,
+                SKU: `${parent.SKU}-standard`,
+                'Attribute 1 value(s)': parent['Attribute 1 default'] || 'Standard',
+                'Regular price': parent['Regular price'],
+                'Compare at price': parent['Compare at price'],
+                Stock: parent.Stock,
+                Status: parent.Status,
+              },
+            ];
+
+      for (const [index, variation] of variantsToImport.entries()) {
         const weight = parseWeight(variation['Attribute 1 value(s)']);
 
         await upsert(
