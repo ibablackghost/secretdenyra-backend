@@ -2,8 +2,6 @@ import fs from 'node:fs';
 
 import { importTisanesCsv } from '../../../utils/import-tisanes';
 
-const jwt = require('jsonwebtoken');
-
 declare const strapi: any;
 
 const getUploadedFile = (files: any) => {
@@ -12,33 +10,10 @@ const getUploadedFile = (files: any) => {
   return Array.isArray(file) ? file[0] : file;
 };
 
-const authenticateAdmin = async (strapi: any, ctx: any) => {
-  const authorization = String(ctx.get('authorization') ?? '');
-  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-  if (!token) return null;
-
-  try {
-    const secret = strapi.config.get('admin.auth.secret');
-    const payload = jwt.verify(token, secret);
-    const adminId = payload?.id;
-    if (!adminId) return null;
-
-    return await strapi.db.query('admin::user').findOne({
-      where: {
-        id: adminId,
-        isActive: true,
-      },
-    });
-  } catch {
-    return null;
-  }
-};
-
 export default {
   async importTisanes(ctx: any) {
     try {
-      const admin = await authenticateAdmin(strapi, ctx);
-      if (!admin) {
+      if (!ctx.state?.isAuthenticated) {
         ctx.status = 401;
         ctx.body = {
           code: 'ADMIN_UNAUTHORIZED',

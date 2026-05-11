@@ -88,7 +88,7 @@ const ImportTisanes = () => {
       formData.append('importImages', String(importImages));
 
       const { post } = getFetchClient();
-      const response = await post('/api/admin/import/tisanes', formData);
+      const response = await post('/admin/import/tisanes', formData);
       setReport(response.data.report);
     } catch (requestError: any) {
       setError(formatError(requestError));
