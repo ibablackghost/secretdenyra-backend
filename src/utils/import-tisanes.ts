@@ -328,6 +328,26 @@ const categoryPresetFor = (value: unknown) => {
     };
   }
 
+  if (/\b(cafe|cafes|coffee)\b/.test(normalized)) {
+    return {
+      name: 'Cafés',
+      slug: 'cafes',
+      metaTitle: 'Cafés bio | Nyra',
+      metaDescription: 'Découvrez les cafés bio Nyra en vrac, disponibles en grain et en plusieurs formats.',
+      canonicalPath: '/collections/cafes',
+    };
+  }
+
+  if (/\b(herboristerie|plante|plantes)\b/.test(normalized)) {
+    return {
+      name: 'Herboristerie',
+      slug: 'herboristerie',
+      metaTitle: 'Herboristerie bio | Nyra',
+      metaDescription: 'Découvrez les plantes d’herboristerie bio Nyra en vrac, sélectionnées avec soin.',
+      canonicalPath: '/collections/herboristerie',
+    };
+  }
+
   const name = categoryNameFor(raw);
   const slug = slugify(name);
 
