@@ -274,6 +274,48 @@ const ensureTag = async (strapi: any, report: ImportReport, cache: Map<string, A
   return tag;
 };
 
+const categoryPresetFor = (value: unknown) => {
+  const raw = String(value ?? '').trim();
+  const normalized = stripAccents(raw).toLowerCase();
+
+  if (normalized.includes('the') || normalized.includes('tea')) {
+    return {
+      name: 'Thés bio',
+      slug: 'thes-bio',
+      metaTitle: 'Thés bio | Nyra',
+      metaDescription: 'Découvrez les thés bio Nyra en vrac, disponibles en plusieurs formats.',
+      canonicalPath: '/collections/thes-bio',
+    };
+  }
+
+  return {
+    name: 'Tisanes',
+    slug: 'tisanes',
+    metaTitle: 'Tisanes bio | Nyra',
+    metaDescription: 'Découvrez les tisanes bio Nyra en vrac, disponibles en plusieurs formats.',
+    canonicalPath: '/collections/tisanes',
+  };
+};
+
+const ensureCategory = async (strapi: any, report: ImportReport, cache: Map<string, AnyRecord>, value: unknown) => {
+  const preset = categoryPresetFor(value);
+  if (cache.has(preset.slug)) return cache.get(preset.slug);
+
+  const category = await upsert(
+    strapi,
+    report,
+    'api::category.category',
+    { slug: preset.slug },
+    preset,
+    { created: 'productsCreated', updated: 'productsUpdated' },
+    undefined,
+    'published',
+  );
+
+  cache.set(preset.slug, category);
+  return category;
+};
+
 export const importTisanesCsv = async (strapi: any, csvContent: string, options: ImportOptions = {}) => {
   const report = createReport(Boolean(options.dryRun));
   const importImages = options.importImages !== false;
@@ -283,6 +325,7 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
   const variations = records.filter((record) => record.Type === 'variation');
   const variationsByParent = new Map<string, AnyRecord[]>();
   const tagCache = new Map<string, AnyRecord>();
+  const categoryCache = new Map<string, AnyRecord>();
   const imageCache = new Map<string, number>();
 
   report.totalRows = records.length;
@@ -308,25 +351,9 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
     variationsByParent.set(variation.Parent, list);
   }
 
-  const category = await upsert(
-    strapi,
-    report,
-    'api::category.category',
-    { slug: 'tisanes' },
-    {
-      name: 'Tisanes',
-      slug: 'tisanes',
-      metaTitle: 'Tisanes bio | Nyra',
-      metaDescription: 'Découvrez les tisanes bio Nyra en vrac, disponibles en plusieurs formats.',
-      canonicalPath: '/collections/tisanes',
-    },
-    { created: 'productsCreated', updated: 'productsUpdated' },
-    undefined,
-    'published',
-  );
-
   for (const parent of parents) {
     try {
+      const category = await ensureCategory(strapi, report, categoryCache, parent['Strapi category'] || parent.Categories);
       const productVariations = variationsByParent.get(parent.SKU) ?? [];
       const prices = productVariations.map((variation) => parsePrice(variation['Regular price'])).filter((price) => price > 0);
       const productPrice = prices.length > 0 ? Math.min(...prices) : 0;
