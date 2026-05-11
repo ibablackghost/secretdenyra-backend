@@ -106,9 +106,9 @@ const parseWeight = (value: unknown) => {
   };
 };
 
-const publishedAtFor = (status: unknown) => (String(status).toLowerCase() === 'published' ? new Date().toISOString() : null);
+const statusFor = (status: unknown) => (String(status).toLowerCase() === 'published' ? 'published' : 'draft');
 
-const relationId = (entity: AnyRecord | null | undefined) => entity?.id ?? entity?.documentId;
+const relationId = (entity: AnyRecord | null | undefined) => entity?.documentId ?? entity?.id;
 
 const createReport = (dryRun: boolean): ImportReport => ({
   dryRun,
@@ -131,6 +131,36 @@ const findOne = async (strapi: any, uid: string, where: AnyRecord, populate?: An
     ...(populate ? { populate } : {}),
   });
 
+const findDocument = async (strapi: any, uid: string, filters: AnyRecord, populate?: AnyRecord) =>
+  strapi.documents(uid).findFirst({
+    filters,
+    ...(populate ? { populate } : {}),
+  });
+
+const writeDocument = async (
+  strapi: any,
+  uid: string,
+  existing: AnyRecord | null | undefined,
+  data: AnyRecord,
+  status: string,
+  populate?: AnyRecord,
+) => {
+  if (existing?.documentId) {
+    return strapi.documents(uid).update({
+      documentId: existing.documentId,
+      data,
+      status,
+      ...(populate ? { populate } : {}),
+    });
+  }
+
+  return strapi.documents(uid).create({
+    data,
+    status,
+    ...(populate ? { populate } : {}),
+  });
+};
+
 const upsert = async (
   strapi: any,
   report: ImportReport,
@@ -139,8 +169,9 @@ const upsert = async (
   data: AnyRecord,
   counters: { created: keyof ImportReport; updated: keyof ImportReport },
   populate?: AnyRecord,
+  status = 'published',
 ) => {
-  const existing = await findOne(strapi, uid, where, populate);
+  const existing = (await findDocument(strapi, uid, where, populate)) ?? (await findOne(strapi, uid, where, populate));
 
   if (report.dryRun) {
     if (existing) {
@@ -154,18 +185,11 @@ const upsert = async (
 
   if (existing) {
     (report[counters.updated] as number) += 1;
-    return strapi.db.query(uid).update({
-      where: { id: existing.id },
-      data,
-      ...(populate ? { populate } : {}),
-    });
+    return writeDocument(strapi, uid, existing, data, status, populate);
   }
 
   (report[counters.created] as number) += 1;
-  return strapi.db.query(uid).create({
-    data,
-    ...(populate ? { populate } : {}),
-  });
+  return writeDocument(strapi, uid, null, data, status, populate);
 };
 
 const mediaTypeFor = (fileName: string, fallback?: string | null) => {
@@ -192,6 +216,17 @@ const uploadImage = async (strapi: any, report: ImportReport, cache: Map<string,
     const tempPath = path.join(os.tmpdir(), `${Date.now()}-${fileName}`);
     fs.writeFileSync(tempPath, buffer);
 
+    const mimeType = mediaTypeFor(fileName, response.headers.get('content-type'));
+    const file = {
+      path: tempPath,
+      filepath: tempPath,
+      name: fileName,
+      originalFilename: fileName,
+      type: mimeType,
+      mimetype: mimeType,
+      size: buffer.length,
+    };
+
     const uploaded = await strapi.plugin('upload').service('upload').upload({
       data: {
         fileInfo: {
@@ -199,12 +234,7 @@ const uploadImage = async (strapi: any, report: ImportReport, cache: Map<string,
           caption: alt,
         },
       },
-      files: {
-        path: tempPath,
-        name: fileName,
-        type: mediaTypeFor(fileName, response.headers.get('content-type')),
-        size: buffer.length,
-      },
+      files: file,
     });
 
     fs.unlinkSync(tempPath);
@@ -234,9 +264,10 @@ const ensureTag = async (strapi: any, report: ImportReport, cache: Map<string, A
     {
       name: tagName,
       slug,
-      publishedAt: new Date().toISOString(),
     },
     { created: 'tagsCreated', updated: 'tagsUpdated' },
+    undefined,
+    'published',
   );
 
   cache.set(slug, tag);
@@ -288,9 +319,10 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
       metaTitle: 'Tisanes bio | Nyra',
       metaDescription: 'Découvrez les tisanes bio Nyra en vrac, disponibles en plusieurs formats.',
       canonicalPath: '/collections/tisanes',
-      publishedAt: new Date().toISOString(),
     },
     { created: 'productsCreated', updated: 'productsUpdated' },
+    undefined,
+    'published',
   );
 
   for (const parent of parents) {
@@ -339,9 +371,10 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
           ...(imageId ? { image: imageId, gallery: [imageId], ogImage: imageId } : {}),
           category: relationId(category),
           tags,
-          publishedAt: publishedAtFor(parent.Status),
         },
         { created: 'productsCreated', updated: 'productsUpdated' },
+        undefined,
+        statusFor(parent.Status),
       );
 
       for (const [index, variation] of productVariations.entries()) {
@@ -368,9 +401,10 @@ export const importTisanesCsv = async (strapi: any, csvContent: string, options:
             isActive: true,
             position: index,
             product: relationId(product),
-            publishedAt: publishedAtFor(variation.Status),
           },
           { created: 'variantsCreated', updated: 'variantsUpdated' },
+          undefined,
+          statusFor(variation.Status),
         );
       }
     } catch (error: any) {
