@@ -26,6 +26,30 @@
       "type": "text",
       "required": true
     },
+    "shortDescription": {
+      "type": "text"
+    },
+    "description": {
+      "type": "richtext"
+    },
+    "dosage": {
+      "type": "string"
+    },
+    "infusionTime": {
+      "type": "string"
+    },
+    "temperature": {
+      "type": "string"
+    },
+    "origin": {
+      "type": "string"
+    },
+    "botanicalName": {
+      "type": "string"
+    },
+    "sourceUrl": {
+      "type": "string"
+    },
     "price": {
       "type": "integer",
       "required": true,
