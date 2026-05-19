@@ -1,4 +1,5 @@
 import { businessError, productLookupWhere, publicCartProduct, requireUser } from '../../../utils/commerce';
+import { ensureUserProfile, isProfessionalAccount, proRequestPayload } from '../../../utils/pro-account';
 
 declare const strapi: any;
 
@@ -9,12 +10,16 @@ const toPositiveInt = (value: unknown, fallback: number, max?: number) => {
   return max ? Math.min(parsed, max) : parsed;
 };
 
-const profilePayload = (user: any, profile?: any | null) => ({
+const profilePayload = (user: any, profile?: any | null, proRequest?: any | null) => ({
   email: user.email,
   username: user.username,
   firstName: profile?.firstName ?? '',
   lastName: profile?.lastName ?? '',
   phone: profile?.phone ?? '',
+  accountType: profile?.accountType ?? 'classic',
+  isProfessional: isProfessionalAccount(profile),
+  proApprovedAt: profile?.proApprovedAt ?? null,
+  proAccountRequest: proRequest ? proRequestPayload(proRequest) : null,
 });
 
 const sanitizeProfileInput = (body: any) => ({
@@ -287,11 +292,10 @@ export default {
     const user = requireUser(ctx);
     if (!user) return;
 
-    const profile = await strapi.db.query('api::user-profile.user-profile').findOne({
-      where: { user: { id: user.id } },
-    });
+    const profile = await ensureUserProfile(strapi, user.id);
+    const proRequest = await strapi.service('api::pro-account-request.pro-account-request').getLatestForUser(user.id);
 
-    ctx.body = profilePayload(user, profile);
+    ctx.body = profilePayload(user, profile, proRequest);
   },
 
   async updateProfile(ctx: any) {
@@ -310,11 +314,43 @@ export default {
       : await strapi.db.query('api::user-profile.user-profile').create({
           data: {
             ...data,
+            accountType: 'classic',
             user: user.id,
           },
         });
 
-    ctx.body = profilePayload(user, profile);
+    const proRequest = await strapi.service('api::pro-account-request.pro-account-request').getLatestForUser(user.id);
+    ctx.body = profilePayload(user, profile, proRequest);
+  },
+
+  async proAccountRequest(ctx: any) {
+    const user = requireUser(ctx);
+    if (!user) return;
+
+    const profile = await ensureUserProfile(strapi, user.id);
+    const request = await strapi.service('api::pro-account-request.pro-account-request').getLatestForUser(user.id);
+
+    ctx.body = {
+      accountType: profile.accountType ?? 'classic',
+      isProfessional: isProfessionalAccount(profile),
+      request: request ? proRequestPayload(request) : null,
+    };
+  },
+
+  async submitProAccountRequest(ctx: any) {
+    const user = requireUser(ctx);
+    if (!user) return;
+
+    const result = await strapi
+      .service('api::pro-account-request.pro-account-request')
+      .submitForUser(user, ctx.request.body ?? {});
+
+    if (result.error) {
+      const status = result.error === 'REQUEST_INVALID' ? 400 : 409;
+      return businessError(ctx, status, result.error, result.message);
+    }
+
+    ctx.body = result;
   },
 
   async listAddresses(ctx: any) {

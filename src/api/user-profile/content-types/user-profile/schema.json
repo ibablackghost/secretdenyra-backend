@@ -4,14 +4,23 @@
   "info": {
     "singularName": "user-profile",
     "pluralName": "user-profiles",
-    "displayName": "User profile",
-    "description": "Profil client Nyra lie a users-permissions"
+    "displayName": "Profil utilisateur",
+    "description": "Profil client Nyra. accountType = classic (defaut) ou professional (tarifs herboristerie)."
   },
   "options": {
     "draftAndPublish": false
   },
   "pluginOptions": {},
   "attributes": {
+    "accountType": {
+      "type": "enumeration",
+      "enum": ["classic", "professional"],
+      "default": "classic",
+      "required": true
+    },
+    "proApprovedAt": {
+      "type": "datetime"
+    },
     "firstName": {
       "type": "string"
     },

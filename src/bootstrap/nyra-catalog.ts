@@ -63,6 +63,8 @@ async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
   enable('api::me', 'me', [
     'profile',
     'updateProfile',
+    'proAccountRequest',
+    'submitProAccountRequest',
     'listAddresses',
     'createAddress',
     'updateAddress',

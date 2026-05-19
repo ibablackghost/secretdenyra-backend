@@ -12,6 +12,16 @@ export default {
     },
     {
       method: 'GET',
+      path: '/me/pro-account-request',
+      handler: 'me.proAccountRequest',
+    },
+    {
+      method: 'POST',
+      path: '/me/pro-account-request',
+      handler: 'me.submitProAccountRequest',
+    },
+    {
+      method: 'GET',
       path: '/me/addresses',
       handler: 'me.listAddresses',
     },

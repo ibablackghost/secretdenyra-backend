@@ -1,0 +1,54 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pro_account_requests",
+  "info": {
+    "singularName": "pro-account-request",
+    "pluralName": "pro-account-requests",
+    "displayName": "Demande compte pro",
+    "description": "Demande d'activation d'un compte professionnel (validation admin)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "companyName": {
+      "type": "string",
+      "required": true
+    },
+    "siret": {
+      "type": "string"
+    },
+    "companyPhone": {
+      "type": "string"
+    },
+    "message": {
+      "type": "text"
+    },
+    "applicantEmail": {
+      "type": "email",
+      "required": true
+    },
+    "applicantName": {
+      "type": "string"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "approved", "rejected"],
+      "default": "pending",
+      "required": true
+    },
+    "reviewedAt": {
+      "type": "datetime"
+    },
+    "adminNote": {
+      "type": "text"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    }
+  }
+}
