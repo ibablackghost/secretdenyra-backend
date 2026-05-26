@@ -52,6 +52,11 @@ export default {
     },
     {
       method: 'GET',
+      path: '/me/payments/pending',
+      handler: 'me.pendingPayments',
+    },
+    {
+      method: 'GET',
       path: '/me/orders',
       handler: 'me.orders',
     },

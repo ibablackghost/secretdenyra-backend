@@ -1,0 +1,62 @@
+{
+  "kind": "collectionType",
+  "collectionName": "payments",
+  "info": {
+    "singularName": "payment",
+    "pluralName": "payments",
+    "displayName": "Payment",
+    "description": "Paiement PayTech associé à un checkout"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "paymentId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "refCommand": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "token": {
+      "type": "string"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["PENDING", "SUCCESS", "CANCELED", "FAILED"],
+      "required": true,
+      "default": "PENDING"
+    },
+    "provider": {
+      "type": "string",
+      "default": "paytech",
+      "required": true
+    },
+    "checkoutId": {
+      "type": "string",
+      "required": true
+    },
+    "amount": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "currency": {
+      "type": "string",
+      "required": true,
+      "default": "XOF"
+    },
+    "errorType": {
+      "type": "string"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

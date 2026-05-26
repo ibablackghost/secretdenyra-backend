@@ -2,15 +2,35 @@ import { factories } from '@strapi/strapi';
 import { randomUUID } from 'crypto';
 
 import {
+  createOrderFromCheckout,
+  finalizePaidCheckout,
+  loadCheckoutLineItems,
+  loadUserCart,
+  recordPurchaseEvent,
+} from '../../../utils/checkout-completion';
+import {
+  buildLineItemsFromRequest,
+  generateGuestToken,
+  getOptionalUser,
+  resolveCheckoutAccess,
+  serializeLineItems,
+} from '../../../utils/guest-checkout';
+import {
   businessError,
   cartItemPopulate,
   cartSummary,
-  cartUnitPrice,
   CURRENCY,
   productLookupWhere,
   requireUser,
   validateQuantity,
 } from '../../../utils/commerce';
+import {
+  buildRefCommand,
+  fetchPaytechPaymentStatus,
+  getPaytechConfig,
+  mapPaytechRemoteStatus,
+  requestPaytechPayment,
+} from '../../../utils/paytech';
 
 const CHECKOUT_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -27,12 +47,7 @@ const validateCustomer = (customer: any) =>
 const validateAddress = (address: any) =>
   address && filled(address.line1) && filled(address.city) && filled(address.country);
 
-const loadCart = async (strapi: any, userId: number) =>
-  strapi.db.query('api::cart-item.cart-item').findMany({
-    where: { user: { id: userId } },
-    populate: cartItemPopulate,
-    orderBy: [{ createdAt: 'asc' }],
-  });
+const loadCart = loadUserCart;
 
 const defaultVariantFor = (product: any) => {
   const activeVariants = (product.variants ?? []).filter((variant: any) => variant.isActive !== false);
@@ -173,92 +188,28 @@ const retrieveStripePaymentIntent = async (paymentIntentId: string) => {
   return (await response.json()) as any;
 };
 
-const createOrderFromCheckout = async (strapi: any, userId: number, checkout: any, items: any[], summary: any) => {
-  const existingOrder = await strapi.db.query('api::order.order').findOne({
-    where: { checkoutId: checkout.checkoutId },
-  });
+export default factories.createCoreController('api::checkout.checkout' as any, ({ strapi }) => {
+  const loadPaymentForCheckout = async (checkoutId: string, paymentId?: string) => {
+    const where: Record<string, unknown> = {
+      checkoutId,
+      provider: 'paytech',
+    };
+    if (paymentId) where.paymentId = paymentId;
 
-  if (existingOrder) return existingOrder;
-
-  const order = await strapi.db.query('api::order.order').create({
-    data: {
-      orderNumber: `ord_${Date.now()}_${randomUUID().slice(0, 8)}`,
-      checkoutId: checkout.checkoutId,
-      status: 'paid',
-      paymentProvider: 'stripe',
-      paymentIntentId: checkout.paymentIntentId,
-      currency: summary.currency,
-      subtotal: summary.subtotal,
-      shipping: summary.shipping,
-      total: summary.total,
-      customer: checkout.customer,
-      shippingAddress: checkout.shippingAddress,
-      billingAddress: checkout.billingAddress,
-      user: userId,
-    },
-  });
-
-  for (const item of items) {
-    const unitPrice = cartUnitPrice(item);
-    await strapi.db.query('api::order-item.order-item').create({
-      data: {
-        productName: item.product.name,
-        productSlug: item.product.slug,
-        productDocumentId: String(item.product.documentId ?? item.product.id),
-        categoryName: item.product.category?.name ?? item.product.category?.slug ?? null,
-        currency: summary.currency,
-        variantLabel: item.variant?.label ?? item.variant?.name ?? item.variant?.format,
-        sku: item.variant.sku,
-        quantity: item.quantity,
-        unitPrice,
-        lineTotal: unitPrice * item.quantity,
-        product: item.product.id,
-        variant: item.variant.id,
-        order: order.id,
-      },
+    const payments = await strapi.db.query('api::payment.payment').findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }],
+      limit: 1,
     });
-  }
 
-  return order;
-};
+    return payments[0] ?? null;
+  };
 
-const purchaseAnalyticsPayload = (checkout: any, order: any, summary: any) => ({
-  event: 'purchase',
-  checkout_session_id: checkout.checkoutId,
-  order_id: String(order.documentId ?? order.id),
-  transaction_id: order.orderNumber,
-  currency: summary.currency,
-  value: summary.total,
-  shipping: summary.shipping,
-  items: summary.items.map((item: any) => item.analytics),
-});
-
-const recordPurchaseEvent = async (strapi: any, ctx: any, userId: number, checkout: any, order: any, summary: any) => {
-  const payload = purchaseAnalyticsPayload(checkout, order, summary);
-
-  await strapi.db.query('api::analytics-event.analytics-event').create({
-    data: {
-      eventName: 'purchase',
-      checkoutSessionId: checkout.checkoutId,
-      orderId: String(order.documentId ?? order.id),
-      currency: summary.currency,
-      value: summary.total,
-      payload,
-      requestId: ctx.state?.requestId,
-      userAgent: ctx.get('user-agent'),
-      user: userId,
-    },
-  });
-
-  return payload;
-};
-
-export default factories.createCoreController('api::checkout.checkout' as any, ({ strapi }) => ({
+  return {
   async init(ctx: any) {
-    const user = requireUser(ctx);
-    if (!user) return;
-
-    const { customer, shippingAddress, billingAddress, billingSameAsShipping = true, items: requestedItems } = ctx.request.body ?? {};
+    const user = await getOptionalUser(ctx, strapi);
+    const { customer, shippingAddress, billingAddress, billingSameAsShipping = true, items: requestedItems } =
+      ctx.request.body ?? {};
 
     if (!validateCustomer(customer)) {
       return businessError(ctx, 400, 'INVALID_CUSTOMER_INFO', 'Informations client invalides.');
@@ -273,18 +224,36 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       return businessError(ctx, 400, 'INVALID_BILLING_ADDRESS', 'Adresse de facturation incomplète.');
     }
 
-    const syncError = await syncCheckoutItemsToCart(strapi, user.id, requestedItems);
-    if (syncError === 'PRODUCT_NOT_FOUND') return businessError(ctx, 404, 'PRODUCT_NOT_FOUND', 'Produit ou variante introuvable.');
-    if (syncError === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
-    if (syncError) return businessError(ctx, 400, syncError, 'Panier invalide.');
+    let items: any[] = [];
 
-    const items = await loadCart(strapi, user.id);
+    if (user) {
+      const syncError = await syncCheckoutItemsToCart(strapi, user.id, requestedItems);
+      if (syncError === 'PRODUCT_NOT_FOUND') {
+        return businessError(ctx, 404, 'PRODUCT_NOT_FOUND', 'Produit ou variante introuvable.');
+      }
+      if (syncError === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
+      if (syncError) return businessError(ctx, 400, syncError, 'Panier invalide.');
+
+      items = await loadCart(strapi, user.id);
+    } else {
+      const built = await buildLineItemsFromRequest(strapi, requestedItems);
+      if (built.error === 'PRODUCT_NOT_FOUND') {
+        return businessError(ctx, 404, 'PRODUCT_NOT_FOUND', 'Produit ou variante introuvable.');
+      }
+      if (built.error === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
+      if (built.error === 'CART_EMPTY') return businessError(ctx, 400, 'CART_EMPTY', 'Le panier est vide.');
+      if (built.error) return businessError(ctx, 400, built.error, 'Panier invalide.');
+      items = built.items;
+    }
+
     const cartError = assertCartAvailable(items);
     if (cartError === 'CART_EMPTY') return businessError(ctx, 400, 'CART_EMPTY', 'Le panier est vide.');
     if (cartError === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
     if (cartError) return businessError(ctx, 400, cartError, 'Panier invalide.');
 
     const summary = cartSummary(items);
+    const guestCredentials = user ? null : generateGuestToken();
+
     const checkout = await strapi.db.query('api::checkout.checkout').create({
       data: {
         checkoutId: `chk_${randomUUID().replace(/-/g, '')}`,
@@ -298,7 +267,13 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
         shipping: summary.shipping,
         total: summary.total,
         expiresAt: new Date(Date.now() + CHECKOUT_TTL_MS),
-        user: user.id,
+        ...(user ? { user: user.id } : {}),
+        ...(guestCredentials
+          ? {
+              guestTokenHash: guestCredentials.hash,
+              itemsSnapshot: serializeLineItems(items),
+            }
+          : {}),
       },
     });
 
@@ -307,6 +282,7 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       checkout_session_id: checkout.checkoutId,
       status: checkout.status,
       expiresAt: checkout.expiresAt,
+      ...(guestCredentials ? { guestToken: guestCredentials.token } : {}),
       ...summary,
       analytics: {
         checkout_session_id: checkout.checkoutId,
@@ -416,20 +392,158 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
     };
   },
 
-  async confirm(ctx: any) {
-    const user = requireUser(ctx);
-    if (!user) return;
+  async createPaytechPayment(ctx: any) {
+    const access = await resolveCheckoutAccess(strapi, ctx, ctx.params.checkoutId);
+    if (!access.ok) return;
 
-    const checkout = await loadCheckout(strapi, user.id, ctx.params.checkoutId);
-    if (!checkout) return businessError(ctx, 404, 'CHECKOUT_NOT_FOUND', 'Checkout introuvable.');
+    const { checkout, userId } = access;
     if (isExpired(checkout)) return businessError(ctx, 410, 'CHECKOUT_EXPIRED', 'Checkout expiré.');
+
+    const paytechConfig = getPaytechConfig();
+    if (!paytechConfig) {
+      return businessError(ctx, 503, 'PAYMENT_INFO_INCOMPLETE', 'Configuration paiement incomplète.');
+    }
+
+    const items = await loadCheckoutLineItems(strapi, checkout, userId);
+    const cartError = assertCartAvailable(items);
+    if (cartError === 'CART_EMPTY') return businessError(ctx, 400, 'CART_EMPTY', 'Le panier est vide.');
+    if (cartError === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
+
+    const summary = cartSummary(items);
+    const refCommand = buildRefCommand(checkout.checkoutId);
+    const paymentId = randomUUID();
+    const commandName = `Commande Nyra ${checkout.checkoutId}`;
+
+    const paytech = await requestPaytechPayment({
+      itemName: commandName,
+      itemPrice: summary.total,
+      refCommand,
+      commandName,
+      currency: summary.currency,
+      customField: {
+        checkoutId: checkout.checkoutId,
+        paymentId,
+        ...(userId ? { userId } : {}),
+        guestEmail: checkout.customer?.email ?? null,
+        guestPhone: checkout.customer?.phone ?? null,
+      },
+    });
+
+    if (!paytech) {
+      return businessError(ctx, 503, 'PAYMENT_TIMEOUT', 'Paiement temporairement indisponible.');
+    }
+
+    await strapi.db.query('api::payment.payment').create({
+      data: {
+        paymentId,
+        refCommand,
+        token: paytech.token,
+        status: 'PENDING',
+        provider: 'paytech',
+        checkoutId: checkout.checkoutId,
+        amount: summary.total,
+        currency: summary.currency,
+        ...(userId ? { user: userId } : {}),
+      },
+    });
+
+    await strapi.db.query('api::checkout.checkout').update({
+      where: { id: checkout.id },
+      data: {
+        status: 'payment_pending',
+        subtotal: summary.subtotal,
+        shipping: summary.shipping,
+        total: summary.total,
+        currency: summary.currency,
+        paymentIntentId: paytech.token,
+      },
+    });
+
+    ctx.status = 201;
+    ctx.body = {
+      paymentId,
+      refCommand,
+      token: paytech.token,
+      status: 'PENDING',
+      redirectUrl: paytech.redirectUrl,
+    };
+  },
+
+  async confirm(ctx: any) {
+    const access = await resolveCheckoutAccess(strapi, ctx, ctx.params.checkoutId);
+    if (!access.ok) return;
+
+    const { checkout, userId } = access;
+    if (isExpired(checkout)) return businessError(ctx, 410, 'CHECKOUT_EXPIRED', 'Checkout expiré.');
+
+    const paymentMethod = String(ctx.request.body?.paymentMethod ?? '').toLowerCase();
+    if (paymentMethod === 'paytech') {
+      const paymentId = String(ctx.request.body?.paymentId ?? '').trim();
+      const payment = await loadPaymentForCheckout(checkout.checkoutId, paymentId || undefined);
+      if (!payment) {
+        return businessError(ctx, 400, 'PAYMENT_INFO_INCOMPLETE', 'Informations paiement incomplètes.');
+      }
+
+      let status = payment.status;
+      if (status === 'PENDING' && payment.token) {
+        const remote = await fetchPaytechPaymentStatus(payment.token);
+        status = mapPaytechRemoteStatus(remote);
+        if (status !== payment.status) {
+          await strapi.db.query('api::payment.payment').update({
+            where: { id: payment.id },
+            data: { status },
+          });
+        }
+      }
+
+      if (status === 'CANCELED') {
+        return businessError(ctx, 402, 'PAYMENT_DECLINED', 'Paiement annulé.');
+      }
+      if (status !== 'SUCCESS') {
+        return businessError(ctx, 409, 'PAYMENT_INFO_INCOMPLETE', 'Paiement non confirmé.');
+      }
+
+      const existingOrder = await strapi.db.query('api::order.order').findOne({
+        where: { checkoutId: checkout.checkoutId },
+      });
+
+      if (existingOrder) {
+        ctx.body = {
+          orderId: String(existingOrder.documentId ?? existingOrder.id),
+          order_id: String(existingOrder.documentId ?? existingOrder.id),
+          checkout_session_id: checkout.checkoutId,
+          status: 'paid',
+        };
+        return;
+      }
+
+      const { order, purchaseAnalytics } = await finalizePaidCheckout(strapi, ctx, {
+        userId,
+        checkout,
+        paymentProvider: 'paytech',
+        paymentReference: payment.token ?? payment.refCommand,
+      });
+
+      ctx.body = {
+        orderId: String(order.documentId ?? order.id),
+        order_id: String(order.documentId ?? order.id),
+        checkout_session_id: checkout.checkoutId,
+        status: 'paid',
+        analytics: purchaseAnalytics,
+      };
+      return;
+    }
+
+    if (!userId) {
+      return businessError(ctx, 401, 'UNAUTHORIZED', 'Authentification requise pour ce mode de paiement.');
+    }
 
     const paymentIntentId = String(ctx.request.body?.paymentIntentId ?? '');
     if (!paymentIntentId || paymentIntentId !== checkout.paymentIntentId) {
       return businessError(ctx, 400, 'PAYMENT_INFO_INCOMPLETE', 'Informations paiement incomplètes.');
     }
 
-    const items = await loadCart(strapi, user.id);
+    const items = await loadCart(strapi, userId);
     const summary = cartSummary(items);
     if (summary.total !== checkout.total) {
       return businessError(ctx, 409, 'CART_CHANGED', 'Le panier a changé depuis le paiement.', {
@@ -448,14 +562,22 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       return businessError(ctx, 409, 'PAYMENT_INFO_INCOMPLETE', 'Paiement non confirmé.');
     }
 
-    const order = await createOrderFromCheckout(strapi, user.id, checkout, items, summary);
-    const purchaseAnalytics = await recordPurchaseEvent(strapi, ctx, user.id, checkout, order, summary);
+    const order = await createOrderFromCheckout(
+      strapi,
+      userId,
+      checkout,
+      items,
+      summary,
+      'stripe',
+      paymentIntentId,
+    );
+    const purchaseAnalytics = await recordPurchaseEvent(strapi, ctx, userId, checkout, order, summary);
     await strapi.db.query('api::checkout.checkout').update({
       where: { id: checkout.id },
       data: { status: 'paid' },
     });
     await strapi.db.query('api::cart-item.cart-item').deleteMany({
-      where: { user: { id: user.id } },
+      where: { user: { id: userId } },
     });
 
     ctx.body = {
@@ -466,4 +588,5 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       analytics: purchaseAnalytics,
     };
   },
-}));
+  };
+});

@@ -83,7 +83,12 @@ const orderDetailPayload = (order: any) => ({
   technicalId: String(order.documentId ?? order.id),
   createdAt: order.createdAt,
   status: order.status,
-  paymentMethod: order.paymentProvider === 'stripe' ? 'card' : order.paymentProvider,
+  paymentMethod:
+    order.paymentProvider === 'stripe'
+      ? 'card'
+      : order.paymentProvider === 'paytech'
+        ? 'paytech'
+        : order.paymentProvider,
   items: (order.items ?? []).map((item: any) => ({
     id: String(item.documentId ?? item.id),
     productName: item.productName,
@@ -635,5 +640,32 @@ export default {
     }
 
     ctx.body = { tracked: true };
+  },
+
+  async pendingPayments(ctx: any) {
+    const user = requireUser(ctx);
+    if (!user) return;
+
+    const payments = await strapi.db.query('api::payment.payment').findMany({
+      where: {
+        user: { id: user.id },
+        status: 'PENDING',
+        provider: 'paytech',
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    ctx.body = {
+      items: payments.map((payment: any) => ({
+        paymentId: payment.paymentId,
+        status: payment.status,
+        refCommand: payment.refCommand,
+        checkoutId: payment.checkoutId,
+        amount: payment.amount,
+        currency: payment.currency,
+        createdAt: payment.createdAt,
+      })),
+      count: payments.length,
+    };
   },
 };

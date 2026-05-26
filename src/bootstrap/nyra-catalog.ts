@@ -27,6 +27,9 @@ async function grantPublicCatalogPermissions(strapi: Core.Strapi) {
   enable('api::seo', 'seo', ['sitemap', 'robots']);
   enable('api::tag', 'tag', ['find', 'findOne']);
   enable('api::variant', 'variant', ['find', 'findOne']);
+  enable('api::webhook', 'paytech', ['ipn']);
+  enable('api::checkout', 'checkout', ['init', 'createPaytechPayment', 'confirm']);
+  enable('api::payment', 'payment', ['status']);
 
   await strapi.plugin('users-permissions').service('role').updateRole(publicRole.id, {
     name: roleData.name,
@@ -34,7 +37,7 @@ async function grantPublicCatalogPermissions(strapi: Core.Strapi) {
     permissions: roleData.permissions,
   });
 
-  strapi.log.info('[nyra-catalog] Role Public: find/findOne sur product, category, tag et variant.');
+  strapi.log.info('[nyra-catalog] Role Public: catalogue, checkout invité PayTech et webhook IPN.');
 }
 
 async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
@@ -58,7 +61,15 @@ async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
   };
 
   enable('api::cart', 'cart', ['find', 'addItem', 'updateItem', 'deleteItem']);
-  enable('api::checkout', 'checkout', ['init', 'updateDraft', 'findDraft', 'createPaymentIntent', 'confirm']);
+  enable('api::checkout', 'checkout', [
+    'init',
+    'updateDraft',
+    'findDraft',
+    'createPaymentIntent',
+    'createPaytechPayment',
+    'confirm',
+  ]);
+  enable('api::payment', 'payment', ['status']);
   enable('api::analytics', 'analytics', ['funnel']);
   enable('api::me', 'me', [
     'profile',
@@ -78,6 +89,7 @@ async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
     'deleteWishlistItem',
     'viewedProducts',
     'addViewedProduct',
+    'pendingPayments',
   ]);
   enable('api::wishlist-item', 'wishlist-item', ['list', 'addItem', 'deleteByProduct']);
   enable('api::order', 'order', ['find', 'findOne']);
