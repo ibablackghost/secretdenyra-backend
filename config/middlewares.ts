@@ -37,6 +37,13 @@ const config: Core.Config.Middlewares = [
     name: 'strapi::cors',
     config: {
       origin: corsOrigins,
+      headers: [
+        'Content-Type',
+        'Authorization',
+        'Origin',
+        'Accept',
+        'X-Checkout-Token',
+      ],
     },
   },
   'strapi::poweredBy',
