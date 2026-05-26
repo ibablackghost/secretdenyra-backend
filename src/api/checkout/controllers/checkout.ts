@@ -429,8 +429,23 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       },
     });
 
-    if (!paytech) {
-      return businessError(ctx, 503, 'PAYMENT_TIMEOUT', 'Paiement temporairement indisponible.');
+    if (paytech.ok === false) {
+      strapi.log.warn('[paytech] Echec request-payment', {
+        reason: paytech.reason,
+        message: paytech.message,
+        status: paytech.status,
+        checkoutId: checkout.checkoutId,
+        env: paytechConfig.env,
+      });
+
+      if (paytech.reason === 'missing_config') {
+        return businessError(ctx, 503, 'PAYMENT_INFO_INCOMPLETE', 'Configuration paiement incomplète.');
+      }
+
+      return businessError(ctx, 503, 'PAYMENT_TIMEOUT', 'Paiement temporairement indisponible.', {
+        paytechReason: paytech.reason,
+        paytechMessage: paytech.message ?? null,
+      });
     }
 
     await strapi.db.query('api::payment.payment').create({

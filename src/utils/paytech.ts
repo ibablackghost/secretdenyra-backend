@@ -19,10 +19,14 @@ export type PaytechRequestPaymentInput = {
   customField?: Record<string, unknown>;
 };
 
-export type PaytechRequestPaymentResult = {
-  token: string;
-  redirectUrl: string;
-};
+export type PaytechRequestPaymentResult =
+  | { ok: true; token: string; redirectUrl: string }
+  | {
+      ok: false;
+      reason: 'missing_config' | 'http_error' | 'invalid_response' | 'paytech_rejected';
+      status?: number;
+      message?: string;
+    };
 
 export type PaytechIpnPayload = {
   type_event?: string;
@@ -66,46 +70,102 @@ export const buildRefCommand = (checkoutId: string) => {
   return `NYRA-${Date.now()}-${suffix}`;
 };
 
-export const requestPaytechPayment = async (
-  input: PaytechRequestPaymentInput,
-): Promise<PaytechRequestPaymentResult | null> => {
-  const config = getPaytechConfig();
-  if (!config) return null;
+const buildPaymentBody = (config: PaytechConfig, input: PaytechRequestPaymentInput) => {
+  const params = new URLSearchParams();
+  params.set('item_name', input.itemName);
+  params.set('item_price', String(input.itemPrice));
+  params.set('ref_command', input.refCommand);
+  params.set('command_name', input.commandName);
+  params.set('currency', input.currency ?? 'XOF');
+  params.set('env', config.env);
 
-  const body = {
-    item_name: input.itemName,
-    item_price: input.itemPrice,
-    ref_command: input.refCommand,
-    command_name: input.commandName,
-    currency: input.currency ?? 'XOF',
-    env: config.env,
-    ...(config.ipnUrl ? { ipn_url: config.ipnUrl } : {}),
-    ...(config.successUrl ? { success_url: config.successUrl } : {}),
-    ...(config.cancelUrl ? { cancel_url: config.cancelUrl } : {}),
-    ...(input.customField ? { custom_field: JSON.stringify(input.customField) } : {}),
-  };
+  if (config.ipnUrl) params.set('ipn_url', config.ipnUrl);
+  if (config.successUrl) params.set('success_url', config.successUrl);
+  if (config.cancelUrl) params.set('cancel_url', config.cancelUrl);
+  if (input.customField) params.set('custom_field', JSON.stringify(input.customField));
 
-  const response = await fetch(`${config.baseUrl}/payment/request-payment`, {
-    method: 'POST',
-    headers: {
-      API_KEY: config.apiKey,
-      API_SECRET: config.apiSecret,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  });
+  return params;
+};
 
-  if (!response.ok) return null;
+const parsePaymentResponse = (payload: Record<string, unknown>): PaytechRequestPaymentResult => {
+  const success = payload.success;
+  if (success === 0 || success === -1 || success === '0' || success === '-1') {
+    return {
+      ok: false,
+      reason: 'paytech_rejected',
+      message: String(payload.message ?? payload.error ?? 'PayTech a refusé la demande.'),
+    };
+  }
 
-  const payload = (await response.json()) as Record<string, unknown>;
   const token = String(payload.token ?? '').trim();
   const redirectUrl = String(payload.redirect_url ?? payload.redirectUrl ?? '').trim();
 
-  if (!token || !redirectUrl) return null;
+  if (!token || !redirectUrl) {
+    return {
+      ok: false,
+      reason: 'invalid_response',
+      message: 'Réponse PayTech incomplète (token ou redirect_url manquant).',
+    };
+  }
 
-  return { token, redirectUrl };
+  return { ok: true, token, redirectUrl };
+};
+
+export const requestPaytechPayment = async (
+  input: PaytechRequestPaymentInput,
+): Promise<PaytechRequestPaymentResult> => {
+  const config = getPaytechConfig();
+  if (!config) {
+    return { ok: false, reason: 'missing_config', message: 'PAYTECH_API_KEY ou PAYTECH_API_SECRET manquant.' };
+  }
+
+  const url = `${config.baseUrl}/payment/request-payment`;
+  const formBody = buildPaymentBody(config, input);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        API_KEY: config.apiKey,
+        API_SECRET: config.apiSecret,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: formBody.toString(),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const rawText = await response.text();
+    let payload: Record<string, unknown> = {};
+
+    try {
+      payload = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+    } catch {
+      return {
+        ok: false,
+        reason: 'invalid_response',
+        status: response.status,
+        message: `Réponse PayTech non JSON (HTTP ${response.status}).`,
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: 'http_error',
+        status: response.status,
+        message: String(payload.message ?? payload.error ?? `HTTP ${response.status}`),
+      };
+    }
+
+    return parsePaymentResponse(payload);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'http_error',
+      message: error instanceof Error ? error.message : 'Erreur réseau vers PayTech.',
+    };
+  }
 };
 
 export const fetchPaytechPaymentStatus = async (token: string) => {
