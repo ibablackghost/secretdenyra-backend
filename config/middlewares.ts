@@ -5,6 +5,8 @@ const corsOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'https://secretdenyra-frontend.vercel.app',
+  'https://secretsdenyra.com',
+
 ];
 
 const config: Core.Config.Middlewares = [
