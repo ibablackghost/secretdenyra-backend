@@ -13,6 +13,7 @@ import {
   generateGuestToken,
   getOptionalUser,
   resolveCheckoutAccess,
+  resolveCheckoutLineItem,
   serializeLineItems,
 } from '../../../utils/guest-checkout';
 import {
@@ -20,7 +21,7 @@ import {
   cartItemPopulate,
   cartSummary,
   CURRENCY,
-  productLookupWhere,
+  ensurePersistedVariant,
   requireUser,
   validateQuantity,
 } from '../../../utils/commerce';
@@ -49,15 +50,6 @@ const validateAddress = (address: any) =>
 
 const loadCart = loadUserCart;
 
-const defaultVariantFor = (product: any) => {
-  const activeVariants = (product.variants ?? []).filter((variant: any) => variant.isActive !== false);
-  return (
-    activeVariants.find((variant: any) => variant.isDefault) ??
-    activeVariants.sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))[0] ??
-    null
-  );
-};
-
 const syncCheckoutItemsToCart = async (strapi: any, userId: number, items: any[] = []) => {
   if (!Array.isArray(items) || items.length === 0) return null;
 
@@ -66,27 +58,17 @@ const syncCheckoutItemsToCart = async (strapi: any, userId: number, items: any[]
   });
 
   for (const item of items) {
-    const quantity = validateQuantity(item.quantity);
-    if (!quantity) return 'INVALID_QUANTITY';
+    const resolved = await resolveCheckoutLineItem(strapi, item);
+    if (resolved.error) return resolved.error;
 
-    const product = await strapi.db.query('api::product.product').findOne({
-      where: productLookupWhere(item.productId),
-      populate: {
-        variants: true,
-        image: { fields: ['url', 'alternativeText', 'width', 'height', 'formats'] },
-        category: { fields: ['name', 'slug'] },
-      },
-    });
-    const variant = product ? defaultVariantFor(product) : null;
-
-    if (!product || !variant) return 'PRODUCT_NOT_FOUND';
-    if (quantity > (variant.stock ?? 0)) return 'OUT_OF_STOCK';
+    const { product, variant, quantity } = resolved;
+    const persistedVariant = await ensurePersistedVariant(strapi, product, variant);
 
     await strapi.db.query('api::cart-item.cart-item').create({
       data: {
         user: userId,
         product: product.id,
-        variant: variant.id,
+        variant: persistedVariant.id,
         quantity,
       },
     });
@@ -231,6 +213,9 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       if (syncError === 'PRODUCT_NOT_FOUND') {
         return businessError(ctx, 404, 'PRODUCT_NOT_FOUND', 'Produit ou variante introuvable.');
       }
+      if (syncError === 'VARIANT_NOT_FOUND') {
+        return businessError(ctx, 400, 'VARIANT_NOT_FOUND', 'Variante introuvable pour ce produit.');
+      }
       if (syncError === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
       if (syncError) return businessError(ctx, 400, syncError, 'Panier invalide.');
 
@@ -239,6 +224,9 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       const built = await buildLineItemsFromRequest(strapi, requestedItems);
       if (built.error === 'PRODUCT_NOT_FOUND') {
         return businessError(ctx, 404, 'PRODUCT_NOT_FOUND', 'Produit ou variante introuvable.');
+      }
+      if (built.error === 'VARIANT_NOT_FOUND') {
+        return businessError(ctx, 400, 'VARIANT_NOT_FOUND', 'Variante introuvable pour ce produit.');
       }
       if (built.error === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
       if (built.error === 'CART_EMPTY') return businessError(ctx, 400, 'CART_EMPTY', 'Le panier est vide.');

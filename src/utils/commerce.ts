@@ -61,6 +61,76 @@ export const variantLookupWhere = (variantId: unknown) => {
   return { $or: candidates };
 };
 
+const activeVariantsOnProduct = (product: AnyRecord) =>
+  (product.variants ?? []).filter((variant: AnyRecord) => variant.isActive !== false);
+
+export const matchVariantOnProduct = (product: AnyRecord, variantId?: unknown) => {
+  const value = String(variantId ?? '').trim();
+  if (!value) return null;
+
+  const asNumber = Number(value);
+  const variants = activeVariantsOnProduct(product);
+
+  return (
+    variants.find(
+      (variant: AnyRecord) =>
+        String(variant.documentId ?? '') === value ||
+        String(variant.id) === value ||
+        String(variant.sku ?? '') === value ||
+        (Number.isInteger(asNumber) && asNumber > 0 && variant.id === asNumber),
+    ) ?? null
+  );
+};
+
+export const defaultVariantOnProduct = (product: AnyRecord) => {
+  const variants = activeVariantsOnProduct(product);
+  return (
+    variants.find((variant: AnyRecord) => variant.isDefault) ??
+    variants.sort((a: AnyRecord, b: AnyRecord) => (a.position ?? 0) - (b.position ?? 0))[0] ??
+    null
+  );
+};
+
+/** Produit sans variante Strapi (ex. Secret de Nyra) — prix au niveau produit. */
+export const productLevelVariant = (product: AnyRecord) => ({
+  id: null,
+  documentId: null,
+  sku: `${product.slug}-base`,
+  label: product.name,
+  name: product.name,
+  format: 'standard',
+  price: product.price,
+  stock: 9999,
+  isActive: true,
+  isDefault: true,
+});
+
+export const ensurePersistedVariant = async (strapi: any, product: AnyRecord, variant: AnyRecord) => {
+  if (variant?.id) return variant;
+
+  const existing = await strapi.db.query('api::variant.variant').findOne({
+    where: { product: { id: product.id } },
+    orderBy: [{ position: 'asc' }],
+  });
+  if (existing) return existing;
+
+  return strapi.db.query('api::variant.variant').create({
+    data: {
+      name: product.name,
+      sku: `${product.slug}-default`,
+      format: 'standard',
+      label: product.name,
+      price: product.price,
+      stock: 999,
+      isDefault: true,
+      isActive: true,
+      position: 0,
+      product: product.id,
+      publishedAt: new Date(),
+    },
+  });
+};
+
 export const cartItemPopulate = {
   product: {
     populate: {

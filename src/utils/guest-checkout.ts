@@ -1,6 +1,14 @@
 import { createHash, randomBytes } from 'crypto';
 
-import { businessError, productLookupWhere, validateQuantity } from './commerce';
+import {
+  businessError,
+  defaultVariantOnProduct,
+  matchVariantOnProduct,
+  productLevelVariant,
+  productLookupWhere,
+  validateQuantity,
+  variantLookupWhere,
+} from './commerce';
 
 export const GUEST_TOKEN_HEADER = 'x-checkout-token';
 
@@ -46,13 +54,80 @@ export type CheckoutAccessResult =
   | { ok: true; checkout: any; userId: number | null; isGuest: boolean }
   | { ok: false; handled: true };
 
-const defaultVariantFor = (product: any) => {
-  const activeVariants = (product.variants ?? []).filter((variant: any) => variant.isActive !== false);
-  return (
-    activeVariants.find((variant: any) => variant.isDefault) ??
-    activeVariants.sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))[0] ??
-    null
-  );
+const publishedVariantWhere = {
+  publishedAt: { $notNull: true },
+  $or: [{ isActive: true }, { isActive: { $null: true } }],
+};
+
+const findVariantOnProduct = async (strapi: any, product: any, variantId: unknown) => {
+  const fromDb = await strapi.db.query('api::variant.variant').findOne({
+    where: {
+      $and: [variantLookupWhere(variantId), { product: { id: product.id } }, publishedVariantWhere],
+    },
+  });
+  if (fromDb) return fromDb;
+
+  return matchVariantOnProduct(product, variantId);
+};
+
+const resolveVariantForLineItem = async (
+  strapi: any,
+  product: any,
+  variantId?: unknown,
+) => {
+  const variantIdProvided = String(variantId ?? '').trim().length > 0;
+
+  if (variantIdProvided) {
+    const variant = await findVariantOnProduct(strapi, product, variantId);
+    if (!variant) return { error: 'VARIANT_NOT_FOUND' as const };
+    return { variant };
+  }
+
+  let variant = defaultVariantOnProduct(product);
+
+  if (!variant) {
+    variant = await strapi.db.query('api::variant.variant').findOne({
+      where: {
+        $and: [{ product: { id: product.id } }, publishedVariantWhere],
+      },
+      orderBy: [{ isDefault: 'desc' }, { position: 'asc' }],
+    });
+  }
+
+  if (!variant) {
+    if (product.price == null) return { error: 'PRODUCT_NOT_FOUND' as const };
+    return { variant: productLevelVariant(product) };
+  }
+
+  return { variant };
+};
+
+export const resolveCheckoutLineItem = async (
+  strapi: any,
+  rawItem: { productId?: unknown; variantId?: unknown; quantity?: unknown },
+) => {
+  const quantity = validateQuantity(rawItem.quantity);
+  if (!quantity) return { error: 'INVALID_QUANTITY' as const };
+
+  const product = await strapi.db.query('api::product.product').findOne({
+    where: {
+      $and: [productLookupWhere(rawItem.productId), { publishedAt: { $notNull: true } }],
+    },
+    populate: {
+      variants: true,
+      category: { fields: ['name', 'slug'] },
+    },
+  });
+
+  if (!product) return { error: 'PRODUCT_NOT_FOUND' as const };
+
+  const variantResult = await resolveVariantForLineItem(strapi, product, rawItem.variantId);
+  if ('error' in variantResult && variantResult.error) return { error: variantResult.error };
+
+  const { variant } = variantResult;
+  if (quantity > (variant.stock ?? 0)) return { error: 'OUT_OF_STOCK' as const };
+
+  return { product, variant, quantity };
 };
 
 export const serializeLineItems = (items: any[]) =>
@@ -93,22 +168,9 @@ export const buildLineItemsFromRequest = async (strapi: any, requestedItems: unk
   const items: any[] = [];
 
   for (const item of requestedItems) {
-    const quantity = validateQuantity((item as any)?.quantity);
-    if (!quantity) return { error: 'INVALID_QUANTITY' as const };
-
-    const product = await strapi.db.query('api::product.product').findOne({
-      where: productLookupWhere((item as any).productId),
-      populate: {
-        variants: true,
-        category: { fields: ['name', 'slug'] },
-      },
-    });
-
-    const variant = product ? defaultVariantFor(product) : null;
-    if (!product || !variant) return { error: 'PRODUCT_NOT_FOUND' as const };
-    if (quantity > (variant.stock ?? 0)) return { error: 'OUT_OF_STOCK' as const };
-
-    items.push({ product, variant, quantity });
+    const resolved = await resolveCheckoutLineItem(strapi, item as any);
+    if (resolved.error) return { error: resolved.error };
+    items.push(resolved);
   }
 
   return { items };
