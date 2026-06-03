@@ -45,6 +45,7 @@ const config: Core.Config.Middlewares = [
         'Origin',
         'Accept',
         'X-Checkout-Token',
+        'X-Strapi-Service-Key',
       ],
     },
   },

@@ -4,13 +4,17 @@
   "info": {
     "singularName": "checkout",
     "pluralName": "checkouts",
-    "displayName": "Checkout",
-    "description": "Brouillon checkout avant paiement"
+    "displayName": "Session checkout",
+    "description": "Sessions panier (masquées du menu — voir Commandes)"
   },
   "options": {
     "draftAndPublish": false
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    }
+  },
   "attributes": {
     "checkoutId": {
       "type": "string",

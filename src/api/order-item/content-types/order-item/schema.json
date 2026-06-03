@@ -4,13 +4,17 @@
   "info": {
     "singularName": "order-item",
     "pluralName": "order-items",
-    "displayName": "Order item",
-    "description": "Snapshot commercial d'une ligne commande"
+    "displayName": "Ligne commande",
+    "description": "Détail ligne (visible via une Commande)"
   },
   "options": {
     "draftAndPublish": false
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    }
+  },
   "attributes": {
     "productName": {
       "type": "string",

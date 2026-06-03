@@ -4,8 +4,8 @@
   "info": {
     "singularName": "order",
     "pluralName": "orders",
-    "displayName": "Order",
-    "description": "Commande client Nyra"
+    "displayName": "Commandes",
+    "description": "Commandes payées uniquement (créées après validation PayTech)"
   },
   "options": {
     "draftAndPublish": false
@@ -27,6 +27,10 @@
       "enum": ["pending", "paid", "failed", "shipped", "delivered", "cancelled", "refunded"],
       "required": true,
       "default": "pending"
+    },
+    "paidAt": {
+      "type": "datetime",
+      "description": "Date de validation paiement (CA journalier backoffice)"
     },
     "paymentProvider": {
       "type": "string",

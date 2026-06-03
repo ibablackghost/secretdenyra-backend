@@ -33,11 +33,14 @@ export const createOrderFromCheckout = async (
 
   if (existingOrder) return existingOrder;
 
+  const paidAt = new Date();
+
   const order = await strapi.db.query('api::order.order').create({
     data: {
       orderNumber: `ord_${Date.now()}_${randomUUID().slice(0, 8)}`,
       checkoutId: checkout.checkoutId,
       status: 'paid',
+      paidAt,
       paymentProvider,
       paymentIntentId: paymentReference,
       currency: summary.currency,

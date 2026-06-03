@@ -4,13 +4,17 @@
   "info": {
     "singularName": "payment",
     "pluralName": "payments",
-    "displayName": "Payment",
-    "description": "Paiement PayTech associé à un checkout"
+    "displayName": "Paiement",
+    "description": "Journal technique PayTech (masqué du menu — voir Commandes)"
   },
   "options": {
     "draftAndPublish": false
   },
-  "pluginOptions": {},
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    }
+  },
   "attributes": {
     "paymentId": {
       "type": "string",
