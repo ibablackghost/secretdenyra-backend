@@ -1,4 +1,5 @@
 import { businessError } from '../../../utils/commerce';
+import { finalizePaidCheckoutFromPayment } from '../../../utils/checkout-completion';
 import { resolvePaymentAccess } from '../../../utils/guest-checkout';
 import { fetchPaytechPaymentStatus, getPaytechConfig, mapPaytechRemoteStatus } from '../../../utils/paytech';
 
@@ -38,6 +39,18 @@ export default {
           });
           payment.status = mapped;
         }
+      }
+    }
+
+    if (payment.status === 'SUCCESS') {
+      try {
+        await finalizePaidCheckoutFromPayment(strapi, payment, ctx);
+      } catch (error) {
+        strapi.log.error('[paytech] Impossible de créer la commande après SUCCESS', {
+          paymentId: payment.paymentId,
+          checkoutId: payment.checkoutId,
+          error,
+        });
       }
     }
 

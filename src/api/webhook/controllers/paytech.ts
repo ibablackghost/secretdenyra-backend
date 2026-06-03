@@ -1,4 +1,4 @@
-import { finalizePaidCheckout } from '../../../utils/checkout-completion';
+import { finalizePaidCheckoutFromPayment } from '../../../utils/checkout-completion';
 import { verifyPaytechIpn, type PaytechIpnPayload } from '../../../utils/paytech';
 
 declare const strapi: any;
@@ -14,35 +14,21 @@ const loadPaymentByRef = async (refCommand: string) =>
     populate: { user: true },
   });
 
-const loadCheckoutById = async (checkoutId: string) =>
-  strapi.db.query('api::checkout.checkout').findOne({
-    where: { checkoutId },
-    populate: { user: true },
-  });
-
 const completePaytechPayment = async (payment: any, token?: string) => {
-  if (payment.status === 'SUCCESS') return;
+  if (payment.status !== 'SUCCESS') {
+    await strapi.db.query('api::payment.payment').update({
+      where: { id: payment.id },
+      data: {
+        status: 'SUCCESS',
+        errorType: null,
+        ...(token ? { token } : {}),
+      },
+    });
+    payment.status = 'SUCCESS';
+    if (token) payment.token = token;
+  }
 
-  await strapi.db.query('api::payment.payment').update({
-    where: { id: payment.id },
-    data: {
-      status: 'SUCCESS',
-      errorType: null,
-      ...(token ? { token } : {}),
-    },
-  });
-
-  const checkout = await loadCheckoutById(payment.checkoutId);
-  if (!checkout || checkout.status === 'paid') return;
-
-  const userId = checkout.user?.id ?? payment.user?.id ?? null;
-
-  await finalizePaidCheckout(strapi, syntheticCtx(), {
-    userId,
-    checkout,
-    paymentProvider: 'paytech',
-    paymentReference: token ?? payment.token ?? payment.refCommand,
-  });
+  await finalizePaidCheckoutFromPayment(strapi, payment, syntheticCtx());
 };
 
 export default {

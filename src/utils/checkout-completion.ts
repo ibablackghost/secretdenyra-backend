@@ -155,3 +155,32 @@ export const finalizePaidCheckout = async (
 
   return { order, purchaseAnalytics };
 };
+
+/** Crée la commande si le paiement est SUCCESS mais finalize n'a pas encore été appelé (confirm / IPN manquants). */
+export const finalizePaidCheckoutFromPayment = async (strapi: any, payment: any, ctx?: any) => {
+  const existingOrder = await strapi.db.query('api::order.order').findOne({
+    where: { checkoutId: payment.checkoutId },
+  });
+  if (existingOrder) return existingOrder;
+
+  const checkout = await strapi.db.query('api::checkout.checkout').findOne({
+    where: { checkoutId: payment.checkoutId },
+    populate: { user: true },
+  });
+  if (!checkout || checkout.status === 'paid') return existingOrder ?? null;
+
+  const userId = checkout.user?.id ?? payment.user?.id ?? null;
+  const requestCtx = ctx ?? {
+    state: { requestId: `pay_finalize_${Date.now()}` },
+    get: () => 'Nyra-Payment-Finalize',
+  };
+
+  const { order } = await finalizePaidCheckout(strapi, requestCtx, {
+    userId,
+    checkout,
+    paymentProvider: payment.provider ?? 'paytech',
+    paymentReference: payment.token ?? payment.refCommand ?? payment.paymentId,
+  });
+
+  return order;
+};
