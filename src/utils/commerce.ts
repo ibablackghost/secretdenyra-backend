@@ -1,7 +1,7 @@
 export type AnyRecord = Record<string, any>;
 
 export const FREE_SHIPPING_THRESHOLD = 45000;
-export const SHIPPING_FEE = 2500;
+export const SHIPPING_FEE = 0;
 export const MAX_CART_QUANTITY = 20;
 export const CURRENCY = 'XOF';
 
