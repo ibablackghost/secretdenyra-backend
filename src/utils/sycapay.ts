@@ -228,8 +228,39 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
     const code = String(payload.code ?? payload.errorCode ?? status);
     const message = String(payload.message ?? payload.errorMessage ?? '').trim();
     const data = (payload.data ?? {}) as Record<string, unknown>;
+    const txResponse = (payload.transaction ?? data.transaction ?? {}) as Record<string, unknown>;
 
-    if (status >= 400 || (code && code !== '200' && Number(code) !== 200)) {
+    const redirectUrl =
+      String(
+        payload.urlRedirection ??
+          payload.redirectUrl ??
+          data.urlRedirection ??
+          data.redirectUrl ??
+          txResponse.urlRedirection ??
+          txResponse.redirectUrl ??
+          '',
+      ).trim() || null;
+
+    const tokenTX = String(
+      txResponse.tokenTX ?? data.tokenTX ?? payload.tokenTX ?? '',
+    ).trim();
+
+    const deeplink =
+      String(data.deeplink ?? payload.deeplink ?? txResponse.deeplink ?? '').trim() || null;
+    const qrCode = String(data.qrCode ?? payload.qrCode ?? txResponse.qrCode ?? '').trim() || null;
+    const otpRequired = Boolean(data.otpRequired ?? payload.otpRequired ?? txResponse.otpRequired);
+
+    // 200 = créé ; 201 = paiement déjà en cours → rediriger vers urlRedirection (doc Sycapay Wave)
+    const numericCode = Number(code);
+    const isAcceptedCode =
+      !code ||
+      code === '200' ||
+      code === '201' ||
+      numericCode === 200 ||
+      numericCode === 201;
+    const hasPaymentHandle = Boolean(redirectUrl || tokenTX || otpRequired);
+
+    if (status >= 400 || (!isAcceptedCode && !hasPaymentHandle)) {
       return {
         ok: false,
         reason: status >= 500 ? 'http_error' : 'sycapay_rejected',
@@ -239,23 +270,22 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
       };
     }
 
-    const tokenTX = String(data.tokenTX ?? payload.tokenTX ?? '').trim();
-    if (!tokenTX && data.otpRequired !== true) {
+    if (!tokenTX && !otpRequired && !redirectUrl) {
       return {
         ok: false,
         reason: 'invalid_response',
         status,
-        message: 'Réponse Sycapay incomplète (tokenTX manquant).',
+        message: 'Réponse Sycapay incomplète (tokenTX / urlRedirection manquant).',
       };
     }
 
     return {
       ok: true,
-      tokenTX: tokenTX || String(data.tokenTX ?? ''),
-      redirectUrl: data.redirectUrl ? String(data.redirectUrl) : null,
-      deeplink: data.deeplink ? String(data.deeplink) : null,
-      qrCode: data.qrCode ? String(data.qrCode) : null,
-      otpRequired: Boolean(data.otpRequired),
+      tokenTX,
+      redirectUrl,
+      deeplink,
+      qrCode,
+      otpRequired,
       raw: payload,
     };
   } catch (error) {
