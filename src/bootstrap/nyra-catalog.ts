@@ -27,8 +27,8 @@ async function grantPublicCatalogPermissions(strapi: Core.Strapi) {
   enable('api::seo', 'seo', ['sitemap', 'robots']);
   enable('api::tag', 'tag', ['find', 'findOne']);
   enable('api::variant', 'variant', ['find', 'findOne']);
-  enable('api::webhook', 'paytech', ['ipn']);
-  enable('api::checkout', 'checkout', ['init', 'createPaytechPayment', 'confirm']);
+  enable('api::webhook', 'sycapay', ['webhook']);
+  enable('api::checkout', 'checkout', ['init', 'createSycapayPayment', 'confirmSycapayOtp', 'confirm']);
   enable('api::payment', 'payment', ['status']);
 
   await strapi.plugin('users-permissions').service('role').updateRole(publicRole.id, {
@@ -37,7 +37,7 @@ async function grantPublicCatalogPermissions(strapi: Core.Strapi) {
     permissions: roleData.permissions,
   });
 
-  strapi.log.info('[nyra-catalog] Role Public: catalogue, checkout invité PayTech et webhook IPN.');
+  strapi.log.info('[nyra-catalog] Role Public: catalogue, checkout invité Sycapay et statut paiement.');
 }
 
 async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
@@ -66,7 +66,8 @@ async function grantAuthenticatedCommercePermissions(strapi: Core.Strapi) {
     'updateDraft',
     'findDraft',
     'createPaymentIntent',
-    'createPaytechPayment',
+    'createSycapayPayment',
+    'confirmSycapayOtp',
     'confirm',
   ]);
   enable('api::payment', 'payment', ['status']);

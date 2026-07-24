@@ -5,7 +5,7 @@
     "singularName": "payment",
     "pluralName": "payments",
     "displayName": "Paiement",
-    "description": "Journal technique PayTech (masqué du menu — voir Commandes)"
+    "description": "Journal technique des paiements (masqué du menu — voir Commandes)"
   },
   "options": {
     "draftAndPublish": false
@@ -37,7 +37,6 @@
     },
     "provider": {
       "type": "string",
-      "default": "paytech",
       "required": true
     },
     "checkoutId": {

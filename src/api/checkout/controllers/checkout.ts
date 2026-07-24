@@ -26,27 +26,74 @@ import {
   validateQuantity,
 } from '../../../utils/commerce';
 import {
-  buildRefCommand,
-  fetchPaytechPaymentStatus,
-  getPaytechConfig,
-  mapPaytechRemoteStatus,
-  requestPaytechPayment,
-} from '../../../utils/paytech';
+  buildIdPartenaire,
+  confirmSycapayOtp,
+  fetchSycapayPaymentStatus,
+  getSycapayConfig,
+  initiateSycapayPayment,
+  isSycapayPmService,
+  mapSycapayRemoteStatus,
+  normalizePhone,
+} from '../../../utils/sycapay';
 
 const CHECKOUT_TTL_MS = 6 * 60 * 60 * 1000;
 
 const isEmail = (value: unknown) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? ''));
 const filled = (value: unknown) => String(value ?? '').trim().length > 0;
 
-const validateCustomer = (customer: any) =>
-  customer &&
-  filled(customer.firstName) &&
-  filled(customer.lastName) &&
-  isEmail(customer.email) &&
-  filled(customer.phone);
+/** Nom complet + téléphone obligatoires ; email facultatif. */
+const normalizeCustomer = (customer: any) => {
+  if (!customer || typeof customer !== 'object') return null;
 
-const validateAddress = (address: any) =>
-  address && filled(address.line1) && filled(address.city) && filled(address.country);
+  const fullName = String(customer.fullName ?? '').trim();
+  let firstName = String(customer.firstName ?? '').trim();
+  let lastName = String(customer.lastName ?? '').trim();
+
+  if (fullName) {
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    firstName = parts[0] ?? '';
+    lastName = parts.slice(1).join(' ');
+  }
+
+  const phone = String(customer.phone ?? '').trim();
+  const emailRaw = String(customer.email ?? '').trim();
+
+  return {
+    fullName: fullName || [firstName, lastName].filter(Boolean).join(' ').trim(),
+    firstName,
+    lastName,
+    phone,
+    email: emailRaw || null,
+  };
+};
+
+const validateCustomer = (customer: any) => {
+  const normalized = normalizeCustomer(customer);
+  if (!normalized) return false;
+
+  const hasName = filled(normalized.fullName) || filled(normalized.firstName);
+  if (!hasName) return false;
+  if (!filled(normalized.phone)) return false;
+  if (normalized.email && !isEmail(normalized.email)) return false;
+
+  return true;
+};
+
+/** Une seule adresse texte — pas de code postal / ville / pays obligatoires. */
+const normalizeAddress = (address: any) => {
+  if (typeof address === 'string') {
+    const text = address.trim();
+    return text ? { address: text } : null;
+  }
+  if (!address || typeof address !== 'object') return null;
+
+  const text = String(address.address ?? address.line1 ?? '').trim();
+  if (!text) return null;
+
+  return { address: text };
+};
+
+const validateAddress = (address: any) => Boolean(normalizeAddress(address));
 
 const loadCart = loadUserCart;
 
@@ -174,7 +221,7 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
   const loadPaymentForCheckout = async (checkoutId: string, paymentId?: string) => {
     const where: Record<string, unknown> = {
       checkoutId,
-      provider: 'paytech',
+      provider: 'sycapay',
     };
     if (paymentId) where.paymentId = paymentId;
 
@@ -201,8 +248,13 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       return businessError(ctx, 400, 'INVALID_SHIPPING_ADDRESS', 'Adresse de livraison incomplète.');
     }
 
-    const finalBillingAddress = billingSameAsShipping ? shippingAddress : billingAddress;
-    if (!validateAddress(finalBillingAddress)) {
+    const normalizedCustomer = normalizeCustomer(customer);
+    const normalizedShipping = normalizeAddress(shippingAddress);
+    const finalBillingAddress = billingSameAsShipping
+      ? normalizedShipping
+      : normalizeAddress(billingAddress) ?? normalizedShipping;
+
+    if (!finalBillingAddress) {
       return businessError(ctx, 400, 'INVALID_BILLING_ADDRESS', 'Adresse de facturation incomplète.');
     }
 
@@ -246,8 +298,8 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       data: {
         checkoutId: `chk_${randomUUID().replace(/-/g, '')}`,
         status: 'draft',
-        customer,
-        shippingAddress,
+        customer: normalizedCustomer,
+        shippingAddress: normalizedShipping,
         billingAddress: finalBillingAddress,
         billingSameAsShipping,
         currency: summary.currency,
@@ -295,7 +347,6 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       billingSameAsShipping: ctx.request.body?.billingSameAsShipping ?? checkout.billingSameAsShipping,
       billingAddress: ctx.request.body?.billingAddress ?? checkout.billingAddress,
     };
-    const finalBillingAddress = next.billingSameAsShipping ? next.shippingAddress : next.billingAddress;
 
     if (!validateCustomer(next.customer)) {
       return businessError(ctx, 400, 'INVALID_CUSTOMER_INFO', 'Informations client invalides.');
@@ -303,15 +354,22 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
     if (!validateAddress(next.shippingAddress)) {
       return businessError(ctx, 400, 'INVALID_SHIPPING_ADDRESS', 'Adresse de livraison incomplète.');
     }
-    if (!validateAddress(finalBillingAddress)) {
+
+    const normalizedCustomer = normalizeCustomer(next.customer);
+    const normalizedShipping = normalizeAddress(next.shippingAddress);
+    const finalBillingAddress = next.billingSameAsShipping
+      ? normalizedShipping
+      : normalizeAddress(next.billingAddress) ?? normalizedShipping;
+
+    if (!finalBillingAddress) {
       return businessError(ctx, 400, 'INVALID_BILLING_ADDRESS', 'Adresse de facturation incomplète.');
     }
 
     const updated = await strapi.db.query('api::checkout.checkout').update({
       where: { id: checkout.id },
       data: {
-        customer: next.customer,
-        shippingAddress: next.shippingAddress,
+        customer: normalizedCustomer,
+        shippingAddress: normalizedShipping,
         billingAddress: finalBillingAddress,
         billingSameAsShipping: next.billingSameAsShipping,
       },
@@ -380,16 +438,33 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
     };
   },
 
-  async createPaytechPayment(ctx: any) {
+  async createSycapayPayment(ctx: any) {
     const access = await resolveCheckoutAccess(strapi, ctx, ctx.params.checkoutId);
     if (!access.ok) return;
 
     const { checkout, userId } = access;
     if (isExpired(checkout)) return businessError(ctx, 410, 'CHECKOUT_EXPIRED', 'Checkout expiré.');
 
-    const paytechConfig = getPaytechConfig();
-    if (!paytechConfig) {
+    if (!getSycapayConfig()) {
       return businessError(ctx, 503, 'PAYMENT_INFO_INCOMPLETE', 'Configuration paiement incomplète.');
+    }
+
+    const codeServiceRaw = String(ctx.request.body?.codeService ?? '').trim();
+    const numeroBeneficiaire = normalizePhone(
+      ctx.request.body?.numeroBeneficiaire ?? checkout.customer?.phone,
+    );
+
+    if (!isSycapayPmService(codeServiceRaw)) {
+      return businessError(
+        ctx,
+        400,
+        'PAYMENT_INFO_INCOMPLETE',
+        'codeService invalide (SN_PM_WAVE, SN_PM_OM, SN_PM_YAS, SN_PM_WIZALL).',
+      );
+    }
+
+    if (numeroBeneficiaire.length < 8) {
+      return businessError(ctx, 400, 'PAYMENT_INFO_INCOMPLETE', 'Numéro de téléphone invalide.');
     }
 
     const items = await loadCheckoutLineItems(strapi, checkout, userId);
@@ -398,51 +473,49 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
     if (cartError === 'OUT_OF_STOCK') return businessError(ctx, 409, 'OUT_OF_STOCK', 'Stock insuffisant.');
 
     const summary = cartSummary(items);
-    const refCommand = buildRefCommand(checkout.checkoutId);
+    const idPartenaire = buildIdPartenaire(checkout.checkoutId);
     const paymentId = randomUUID();
-    const commandName = `Commande Nyra ${checkout.checkoutId}`;
+    const codeService = codeServiceRaw.toUpperCase() as
+      | 'SN_PM_WAVE'
+      | 'SN_PM_OM'
+      | 'SN_PM_YAS'
+      | 'SN_PM_WIZALL';
 
-    const paytech = await requestPaytechPayment({
-      itemName: commandName,
-      itemPrice: summary.total,
-      refCommand,
-      commandName,
-      currency: summary.currency,
-      customField: {
-        checkoutId: checkout.checkoutId,
-        paymentId,
-        ...(userId ? { userId } : {}),
-        guestEmail: checkout.customer?.email ?? null,
-        guestPhone: checkout.customer?.phone ?? null,
-      },
+    const sycapay = await initiateSycapayPayment({
+      montant: summary.total,
+      codeService,
+      numeroBeneficiaire,
+      idPartenaire,
+      nomMarchand: 'Nyra',
     });
 
-    if (paytech.ok === false) {
-      strapi.log.warn('[paytech] Echec request-payment', {
-        reason: paytech.reason,
-        message: paytech.message,
-        status: paytech.status,
+    if (sycapay.ok === false) {
+      strapi.log.warn('[sycapay] Echec initiationTransactionV1', {
+        reason: sycapay.reason,
+        message: sycapay.message,
+        status: sycapay.status,
         checkoutId: checkout.checkoutId,
-        env: paytechConfig.env,
+        codeService,
       });
 
-      if (paytech.reason === 'missing_config') {
+      if (sycapay.reason === 'missing_config') {
         return businessError(ctx, 503, 'PAYMENT_INFO_INCOMPLETE', 'Configuration paiement incomplète.');
       }
 
       return businessError(ctx, 503, 'PAYMENT_TIMEOUT', 'Paiement temporairement indisponible.', {
-        paytechReason: paytech.reason,
-        paytechMessage: paytech.message ?? null,
+        sycapayReason: sycapay.reason,
+        sycapayMessage: sycapay.message ?? null,
+        sycapayCode: sycapay.code ?? null,
       });
     }
 
     await strapi.db.query('api::payment.payment').create({
       data: {
         paymentId,
-        refCommand,
-        token: paytech.token,
+        refCommand: idPartenaire,
+        token: sycapay.tokenTX,
         status: 'PENDING',
-        provider: 'paytech',
+        provider: 'sycapay',
         checkoutId: checkout.checkoutId,
         amount: summary.total,
         currency: summary.currency,
@@ -458,17 +531,57 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
         shipping: summary.shipping,
         total: summary.total,
         currency: summary.currency,
-        paymentIntentId: paytech.token,
+        paymentIntentId: sycapay.tokenTX || idPartenaire,
       },
     });
 
     ctx.status = 201;
     ctx.body = {
       paymentId,
-      refCommand,
-      token: paytech.token,
+      idPartenaire,
+      tokenTX: sycapay.tokenTX,
       status: 'PENDING',
-      redirectUrl: paytech.redirectUrl,
+      codeService,
+      redirectUrl: sycapay.redirectUrl,
+      deeplink: sycapay.deeplink,
+      qrCode: sycapay.qrCode,
+      otpRequired: sycapay.otpRequired,
+    };
+  },
+
+  async confirmSycapayOtp(ctx: any) {
+    const access = await resolveCheckoutAccess(strapi, ctx, ctx.params.checkoutId);
+    if (!access.ok) return;
+
+    const { checkout } = access;
+    if (isExpired(checkout)) return businessError(ctx, 410, 'CHECKOUT_EXPIRED', 'Checkout expiré.');
+
+    const paymentId = String(ctx.request.body?.paymentId ?? '').trim();
+    const otp = String(ctx.request.body?.otp ?? '').trim();
+    if (!otp) return businessError(ctx, 400, 'PAYMENT_INFO_INCOMPLETE', 'OTP requis.');
+
+    const payment = await loadPaymentForCheckout(checkout.checkoutId, paymentId || undefined);
+    if (!payment?.token) {
+      return businessError(ctx, 400, 'PAYMENT_INFO_INCOMPLETE', 'Paiement Sycapay introuvable.');
+    }
+
+    const result = await confirmSycapayOtp(payment.token, otp);
+    if (!result.ok) {
+      return businessError(ctx, 402, 'PAYMENT_DECLINED', result.message ?? 'OTP refusé.', {
+        sycapayReason: result.reason,
+      });
+    }
+
+    if (result.status === 'SUCCESS') {
+      await strapi.db.query('api::payment.payment').update({
+        where: { id: payment.id },
+        data: { status: 'SUCCESS', errorType: null },
+      });
+    }
+
+    ctx.body = {
+      paymentId: payment.paymentId,
+      status: result.status,
     };
   },
 
@@ -480,7 +593,8 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
     if (isExpired(checkout)) return businessError(ctx, 410, 'CHECKOUT_EXPIRED', 'Checkout expiré.');
 
     const paymentMethod = String(ctx.request.body?.paymentMethod ?? '').toLowerCase();
-    if (paymentMethod === 'paytech') {
+
+    if (paymentMethod === 'sycapay') {
       const paymentId = String(ctx.request.body?.paymentId ?? '').trim();
       const payment = await loadPaymentForCheckout(checkout.checkoutId, paymentId || undefined);
       if (!payment) {
@@ -488,19 +602,23 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       }
 
       let status = payment.status;
-      if (status === 'PENDING' && payment.token) {
-        const remote = await fetchPaytechPaymentStatus(payment.token);
-        status = mapPaytechRemoteStatus(remote);
+      if (status === 'PENDING' && payment.refCommand) {
+        const remote = await fetchSycapayPaymentStatus(payment.refCommand);
+        status = mapSycapayRemoteStatus(remote);
         if (status !== payment.status) {
           await strapi.db.query('api::payment.payment').update({
             where: { id: payment.id },
-            data: { status },
+            data: {
+              status,
+              ...(status === 'FAILED' ? { errorType: 'failed' } : {}),
+              ...(status === 'CANCELED' ? { errorType: 'canceled' } : {}),
+            },
           });
         }
       }
 
-      if (status === 'CANCELED') {
-        return businessError(ctx, 402, 'PAYMENT_DECLINED', 'Paiement annulé.');
+      if (status === 'CANCELED' || status === 'FAILED') {
+        return businessError(ctx, 402, 'PAYMENT_DECLINED', 'Paiement refusé ou annulé.');
       }
       if (status !== 'SUCCESS') {
         return businessError(ctx, 409, 'PAYMENT_INFO_INCOMPLETE', 'Paiement non confirmé.');
@@ -523,7 +641,7 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       const { order, purchaseAnalytics } = await finalizePaidCheckout(strapi, ctx, {
         userId,
         checkout,
-        paymentProvider: 'paytech',
+        paymentProvider: 'sycapay',
         paymentReference: payment.token ?? payment.refCommand,
       });
 
@@ -535,6 +653,15 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
         analytics: purchaseAnalytics,
       };
       return;
+    }
+
+    if (paymentMethod && paymentMethod !== 'stripe' && paymentMethod !== 'card') {
+      return businessError(
+        ctx,
+        400,
+        'PAYMENT_METHOD_UNSUPPORTED',
+        'Mode de paiement non supporté.',
+      );
     }
 
     if (!userId) {

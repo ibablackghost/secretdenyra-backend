@@ -86,8 +86,8 @@ const orderDetailPayload = (order: any) => ({
   paymentMethod:
     order.paymentProvider === 'stripe'
       ? 'card'
-      : order.paymentProvider === 'paytech'
-        ? 'paytech'
+      : order.paymentProvider === 'sycapay'
+        ? 'sycapay'
         : order.paymentProvider,
   items: (order.items ?? []).map((item: any) => ({
     id: String(item.documentId ?? item.id),
@@ -650,7 +650,6 @@ export default {
       where: {
         user: { id: user.id },
         status: 'PENDING',
-        provider: 'paytech',
       },
       orderBy: [{ createdAt: 'desc' }],
     });

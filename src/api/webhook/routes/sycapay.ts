@@ -2,8 +2,8 @@ export default {
   routes: [
     {
       method: 'POST',
-      path: '/webhooks/paytech/ipn',
-      handler: 'paytech.ipn',
+      path: '/webhooks/sycapay',
+      handler: 'sycapay.webhook',
       config: {
         auth: false,
       },

@@ -178,7 +178,7 @@ export const finalizePaidCheckoutFromPayment = async (strapi: any, payment: any,
   const { order } = await finalizePaidCheckout(strapi, requestCtx, {
     userId,
     checkout,
-    paymentProvider: payment.provider ?? 'paytech',
+    paymentProvider: payment.provider ?? 'unknown',
     paymentReference: payment.token ?? payment.refCommand ?? payment.paymentId,
   });
 

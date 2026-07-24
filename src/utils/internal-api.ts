@@ -146,7 +146,7 @@ export const serializePayment = (payment: any) =>
     total: payment.amount,
     currency: payment.currency ?? 'XOF',
     checkoutId: payment.checkoutId,
-    provider: payment.provider ?? 'paytech',
+    provider: payment.provider ?? null,
     errorType: payment.errorType ?? null,
     updatedAt: payment.updatedAt,
     createdAt: payment.createdAt,

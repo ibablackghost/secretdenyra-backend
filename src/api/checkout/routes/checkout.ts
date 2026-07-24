@@ -28,8 +28,14 @@ export default {
     },
     {
       method: 'POST',
-      path: '/checkout/:checkoutId/payment/paytech',
-      handler: 'checkout.createPaytechPayment',
+      path: '/checkout/:checkoutId/payment/sycapay',
+      handler: 'checkout.createSycapayPayment',
+      config: { auth: false },
+    },
+    {
+      method: 'POST',
+      path: '/checkout/:checkoutId/payment/sycapay/confirm-otp',
+      handler: 'checkout.confirmSycapayOtp',
       config: { auth: false },
     },
     {

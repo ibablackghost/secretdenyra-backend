@@ -129,3 +129,18 @@ dist
 build
 .strapi-updater.json
 .strapi-cloud.json
+
+############################
+# Sycapay / TLS client certs
+############################
+
+client.key
+client.csr
+client.crt
+client.cnf
+ca.crt
+certificat.crt
+*.pem
+secrets/
+sycapay/
+
