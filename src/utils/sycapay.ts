@@ -40,6 +40,7 @@ export type SycapayInitResult =
       tokenTX: string;
       redirectUrl: string | null;
       deeplink: string | null;
+      deepLinks: Record<string, string> | null;
       qrCode: string | null;
       otpRequired: boolean;
       raw: Record<string, unknown>;
@@ -230,7 +231,22 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
     const data = (payload.data ?? {}) as Record<string, unknown>;
     const txResponse = (payload.transaction ?? data.transaction ?? {}) as Record<string, unknown>;
 
-    const redirectUrl =
+    const rawDeepLinks = (payload.deepLinks ?? data.deepLinks ?? txResponse.deepLinks ?? null) as
+      | Record<string, unknown>
+      | null;
+    const deepLinks = rawDeepLinks
+      ? Object.fromEntries(
+          Object.entries(rawDeepLinks)
+            .map(([key, value]) => [key, String(value ?? '').trim()])
+            .filter(([, value]) => Boolean(value)),
+        )
+      : null;
+    const omDeepLink =
+      (deepLinks?.OM ? String(deepLinks.OM) : '') ||
+      (deepLinks?.MAXIT ? String(deepLinks.MAXIT) : '') ||
+      '';
+
+    let redirectUrl =
       String(
         payload.urlRedirection ??
           payload.redirectUrl ??
@@ -245,12 +261,18 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
       txResponse.tokenTX ?? data.tokenTX ?? payload.tokenTX ?? '',
     ).trim();
 
-    const deeplink =
+    let deeplink =
       String(data.deeplink ?? payload.deeplink ?? txResponse.deeplink ?? '').trim() || null;
     const qrCode = String(data.qrCode ?? payload.qrCode ?? txResponse.qrCode ?? '').trim() || null;
     const otpRequired = Boolean(data.otpRequired ?? payload.otpRequired ?? txResponse.otpRequired);
 
-    // 200 = créé ; 201 = paiement déjà en cours → rediriger vers urlRedirection (doc Sycapay Wave)
+    // Orange Money : Sycapay renvoie deepLinks.OM / MAXIT (pas deeplink / redirectUrl)
+    if (omDeepLink) {
+      if (!redirectUrl) redirectUrl = omDeepLink;
+      if (!deeplink) deeplink = omDeepLink;
+    }
+
+    // 200 = créé ; 201 = paiement déjà en cours → rediriger vers urlRedirection / deepLinks (doc Sycapay)
     const numericCode = Number(code);
     const isAcceptedCode =
       !code ||
@@ -258,7 +280,7 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
       code === '201' ||
       numericCode === 200 ||
       numericCode === 201;
-    const hasPaymentHandle = Boolean(redirectUrl || tokenTX || otpRequired);
+    const hasPaymentHandle = Boolean(redirectUrl || deeplink || tokenTX || otpRequired || qrCode);
 
     if (status >= 400 || (!isAcceptedCode && !hasPaymentHandle)) {
       return {
@@ -270,12 +292,12 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
       };
     }
 
-    if (!tokenTX && !otpRequired && !redirectUrl) {
+    if (!tokenTX && !otpRequired && !redirectUrl && !deeplink && !qrCode) {
       return {
         ok: false,
         reason: 'invalid_response',
         status,
-        message: 'Réponse Sycapay incomplète (tokenTX / urlRedirection manquant).',
+        message: 'Réponse Sycapay incomplète (tokenTX / urlRedirection / deepLinks manquant).',
       };
     }
 
@@ -284,6 +306,7 @@ export const initiateSycapayPayment = async (input: SycapayInitInput): Promise<S
       tokenTX,
       redirectUrl,
       deeplink,
+      deepLinks: deepLinks && Object.keys(deepLinks).length > 0 ? deepLinks : null,
       qrCode,
       otpRequired,
       raw: payload,

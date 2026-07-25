@@ -544,6 +544,7 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       codeService,
       redirectUrl: sycapay.redirectUrl,
       deeplink: sycapay.deeplink,
+      deepLinks: sycapay.deepLinks,
       qrCode: sycapay.qrCode,
       otpRequired: sycapay.otpRequired,
     };
