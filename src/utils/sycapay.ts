@@ -177,26 +177,39 @@ const resolveSignatureHeader = (headers: Record<string, string | string[] | unde
   return '';
 };
 
-/** Aligné doc Sycapay : header `sha256=<hex>`, HMAC-SHA256 du body brut. */
+/** Aligné doc Sycapay + réalité prod : hex ou base64, avec/sans préfixe sha256=. */
 export const verifySycapayWebhookHmac = (body: Buffer, signatureHeader: string, secret: string): boolean => {
   if (!secret || !signatureHeader) return false;
 
-  const [algoRaw, sent] = signatureHeader.includes('=')
-    ? signatureHeader.split('=', 2)
-    : ['sha256', signatureHeader];
+  const trimmed = signatureHeader.trim();
+  let algo: 'sha256' | 'sha512' = 'sha256';
+  let sent = trimmed;
 
-  const sentDigest = String(sent ?? '').trim().toLowerCase();
-  if (!sentDigest) return false;
+  const prefixed = trimmed.match(/^sha(256|512)\s*=\s*(.+)$/i);
+  if (prefixed) {
+    algo = prefixed[1] === '512' ? 'sha512' : 'sha256';
+    sent = prefixed[2].trim();
+  }
 
-  // Doc officielle : algo dans le header mais digest toujours SHA256
-  const digest = createHmac('sha256', secret).update(body).digest('hex');
+  if (!sent) return false;
 
-  if (safeEqual(sentDigest, digest)) return true;
+  const candidates = [algo];
+  // Toujours tenter SHA256 (défaut doc), puis SHA512 si header le demande
+  if (algo === 'sha512') candidates.push('sha256');
 
-  // Option doc : SHA512 si l'algo du header le demande explicitement
-  if (algoRaw.toLowerCase().includes('512')) {
-    const digest512 = createHmac('sha512', secret).update(body).digest('hex');
-    return safeEqual(sentDigest, digest512);
+  for (const hashAlgo of candidates) {
+    const asHex = createHmac(hashAlgo, secret).update(body).digest('hex');
+    const asBase64 = createHmac(hashAlgo, secret).update(body).digest('base64');
+    const asBase64Url = createHmac(hashAlgo, secret).update(body).digest('base64url');
+
+    // Hex : case-insensitive
+    if (safeEqual(sent.toLowerCase(), asHex.toLowerCase())) return true;
+
+    // Base64 : case-sensitive (ne pas lowercaser)
+    if (safeEqual(sent, asBase64) || safeEqual(sent, asBase64Url)) return true;
+
+    // Base64 sans padding
+    if (safeEqual(sent.replace(/=+$/, ''), asBase64.replace(/=+$/, ''))) return true;
   }
 
   return false;

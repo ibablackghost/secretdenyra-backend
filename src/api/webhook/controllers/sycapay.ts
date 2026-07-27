@@ -31,7 +31,12 @@ const resolveRawBody = (ctx: any): Buffer => {
 const listSignatureHeaders = (headers: Record<string, unknown>) =>
   Object.entries(headers)
     .filter(([name]) => name.toLowerCase().includes('sign') || name.toLowerCase() === 'authorization')
-    .map(([name, value]) => `${name}=${String(Array.isArray(value) ? value[0] : value).slice(0, 24)}`);
+    .map(([name, value]) => {
+      const raw = String(Array.isArray(value) ? value[0] : value);
+      const looksHex = /^[a-f0-9]+$/i.test(raw.replace(/^sha\d+=/i, ''));
+      const looksB64 = /[+/=]/.test(raw) || /^[A-Za-z0-9_-]+$/.test(raw);
+      return `${name}(len=${raw.length},${looksHex ? 'hex?' : looksB64 ? 'b64?' : 'other'})=${raw.slice(0, 12)}…`;
+    });
 
 const loadPaymentByRef = async (idPartenaire: string) =>
   strapi.db.query('api::payment.payment').findOne({
