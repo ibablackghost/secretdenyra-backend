@@ -170,6 +170,25 @@ export const cartItemPopulate = {
   variant: true,
 };
 
+export const resolveProductImage = (product?: AnyRecord | null) => {
+  if (!product) return null;
+
+  const external = String(product.imageUrl ?? '').trim();
+  if (external) {
+    return {
+      url: external,
+      alternativeText: product.name ?? null,
+      width: null,
+      height: null,
+      formats: null,
+      source: 'url' as const,
+    };
+  }
+
+  const media = publicMedia(product.image);
+  return media ? { ...media, source: 'media' as const } : null;
+};
+
 export const publicCartProduct = (product?: AnyRecord | null) => {
   if (!product) return null;
   const id = String(product.documentId ?? product.id);
@@ -181,7 +200,8 @@ export const publicCartProduct = (product?: AnyRecord | null) => {
     price: product.price,
     currency: CURRENCY,
     compareAtPrice: product.compareAtPrice ?? null,
-    image: publicMedia(product.image),
+    imageUrl: String(product.imageUrl ?? '').trim() || null,
+    image: resolveProductImage(product),
     category: product.category
       ? {
           id: String(product.category.documentId ?? product.category.id),

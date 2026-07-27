@@ -225,7 +225,8 @@ for (const parent of parents) {
   const productVariations = variationsByParent.get(parent.SKU) ?? [];
   const prices = productVariations.map((variation) => parsePrice(variation['Regular price'])).filter((price) => price > 0);
   const productPrice = prices.length > 0 ? Math.min(...prices) : 0;
-  const imageId = await uploadImage(parent.Images, parent['Image alt text']);
+  // URL externe : ne plus uploader sur le disque Strapi (casse au redeploy Railway)
+  const imageUrl = String(parent.Images ?? '').trim() || null;
   const tags = [];
 
   for (const tagName of String(parent.Tags ?? '')
@@ -254,9 +255,7 @@ for (const parent of parents) {
     metaTitle: parent['Meta title'],
     metaDescription: parent['Meta description'],
     canonicalPath: `/produits/${parent.Slug}`,
-    image: imageId,
-    gallery: imageId ? [imageId] : [],
-    ogImage: imageId,
+    imageUrl,
     category: relationId(category),
     tags,
     publishedAt: publishedAtFor(parent.Status),

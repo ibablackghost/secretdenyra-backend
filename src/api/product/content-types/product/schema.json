@@ -95,8 +95,12 @@
     "image": {
       "type": "media",
       "multiple": false,
-      "required": true,
+      "required": false,
       "allowedTypes": ["images"]
+    },
+    "imageUrl": {
+      "type": "string",
+      "required": false
     },
     "gallery": {
       "type": "media",
