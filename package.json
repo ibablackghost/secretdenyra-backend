@@ -11,6 +11,7 @@
     "develop": "strapi develop",
     "import:tisanes": "node scripts/import-tisanes.mjs",
     "import:tisanes:dry": "node -e \"process.env.DRY_RUN='true'; import('./scripts/import-tisanes.mjs')\"",
+    "smoke:email": "node scripts/smoke-email.mjs",
     "openapi:generate": "strapi openapi generate --output ./public/swagger-spec.json",
     "start": "strapi start",
     "strapi": "strapi",
