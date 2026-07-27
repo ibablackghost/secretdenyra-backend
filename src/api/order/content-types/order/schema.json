@@ -5,7 +5,7 @@
     "singularName": "order",
     "pluralName": "orders",
     "displayName": "Commandes",
-    "description": "Commandes payées uniquement (créées après validation PayTech)"
+    "description": "Commandes payées uniquement (créées après validation Sycapay / Stripe)"
   },
   "options": {
     "draftAndPublish": false

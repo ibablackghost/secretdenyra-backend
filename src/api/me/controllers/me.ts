@@ -650,6 +650,8 @@ export default {
       where: {
         user: { id: user.id },
         status: 'PENDING',
+        // Plus de PayTech : n’afficher que Sycapay (et ignore legacy)
+        provider: 'sycapay',
       },
       orderBy: [{ createdAt: 'desc' }],
     });
@@ -658,6 +660,7 @@ export default {
       items: payments.map((payment: any) => ({
         paymentId: payment.paymentId,
         status: payment.status,
+        provider: payment.provider,
         refCommand: payment.refCommand,
         checkoutId: payment.checkoutId,
         amount: payment.amount,

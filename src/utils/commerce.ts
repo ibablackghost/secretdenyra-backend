@@ -28,12 +28,41 @@ export const requireUser = (ctx: AnyRecord) => {
 export const publicMedia = (media?: AnyRecord | null) => {
   if (!media) return null;
 
+  const absolutize = (url?: string | null) => {
+    const value = String(url ?? '').trim();
+    if (!value) return null;
+    if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
+
+    const base = String(
+      process.env.PUBLIC_URL ||
+        process.env.STRAPI_PUBLIC_URL ||
+        process.env.STRAPI_URL ||
+        '',
+    )
+      .trim()
+      .replace(/\/$/, '');
+
+    if (!base) return value;
+    return value.startsWith('/') ? `${base}${value}` : `${base}/${value}`;
+  };
+
+  const formats = media.formats
+    ? Object.fromEntries(
+        Object.entries(media.formats).map(([key, format]: [string, any]) => [
+          key,
+          format && typeof format === 'object'
+            ? { ...format, url: absolutize(format.url) }
+            : format,
+        ]),
+      )
+    : null;
+
   return {
-    url: media.url,
+    url: absolutize(media.url),
     alternativeText: media.alternativeText ?? null,
     width: media.width ?? null,
     height: media.height ?? null,
-    formats: media.formats ?? null,
+    formats,
   };
 };
 
