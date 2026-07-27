@@ -47,10 +47,19 @@ export const sendOrdersNotifyEmail = async (
     return { ok: false as const, reason: 'missing_notify_email' };
   }
 
-  const user = String(process.env.EMAIL_SMTP_USER ?? '').trim();
-  const pass = String(process.env.EMAIL_SMTP_PASS ?? '').trim();
-  if (!user || !pass) {
-    strapi.log.warn('[nyra-mail] SMTP Hostinger incomplet — notification ignorée.');
+  const provider = String(process.env.EMAIL_PROVIDER ?? 'brevo').toLowerCase();
+  const hasBrevo = Boolean(String(process.env.BREVO_API_KEY ?? '').trim());
+  const hasSmtp =
+    Boolean(String(process.env.EMAIL_SMTP_USER ?? '').trim()) &&
+    Boolean(String(process.env.EMAIL_SMTP_PASS ?? '').trim());
+
+  if (provider === 'brevo' && !hasBrevo) {
+    strapi.log.warn('[nyra-mail] BREVO_API_KEY manquant — notification ignorée.');
+    return { ok: false as const, reason: 'missing_smtp' };
+  }
+
+  if (provider !== 'brevo' && !hasSmtp) {
+    strapi.log.warn('[nyra-mail] SMTP incomplet — notification ignorée.');
     return { ok: false as const, reason: 'missing_smtp' };
   }
 
@@ -61,7 +70,7 @@ export const sendOrdersNotifyEmail = async (
       text: params.text,
       html: params.html ?? `<pre style="font-family:sans-serif">${params.text}</pre>`,
     });
-    strapi.log.info('[nyra-mail] Notification envoyée', { to, subject: params.subject });
+    strapi.log.info('[nyra-mail] Notification envoyée', { to, subject: params.subject, provider });
     return { ok: true as const };
   } catch (error: any) {
     strapi.log.error('[nyra-mail] Échec envoi', {
