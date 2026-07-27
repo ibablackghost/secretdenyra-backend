@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 
 import { cartItemPopulate, cartSummary, cartUnitPrice } from './commerce';
+import { notifyPaidOrder } from './notify-orders';
+
 export const loadUserCart = async (strapi: any, userId: number) =>
   strapi.db.query('api::cart-item.cart-item').findMany({
     where: { user: { id: userId } },
@@ -31,7 +33,7 @@ export const createOrderFromCheckout = async (
     where: { checkoutId: checkout.checkoutId },
   });
 
-  if (existingOrder) return existingOrder;
+  if (existingOrder) return { order: existingOrder, created: false as const };
 
   const paidAt = new Date();
 
@@ -75,7 +77,7 @@ export const createOrderFromCheckout = async (
     });
   }
 
-  return order;
+  return { order, created: true as const };
 };
 
 const purchaseAnalyticsPayload = (checkout: any, order: any, summary: any) => ({
@@ -130,7 +132,7 @@ export const finalizePaidCheckout = async (
   const items = await loadCheckoutLineItems(strapi, checkout, userId);
   const summary = cartSummary(items);
 
-  const order = await createOrderFromCheckout(
+  const { order, created } = await createOrderFromCheckout(
     strapi,
     userId,
     checkout,
@@ -153,7 +155,18 @@ export const finalizePaidCheckout = async (
     });
   }
 
-  return { order, purchaseAnalytics };
+  if (created) {
+    // Fire-and-forget : ne bloque pas la réponse checkout / webhook
+    void notifyPaidOrder(strapi, {
+      order,
+      checkout,
+      summary,
+      paymentProvider,
+      paymentReference,
+    });
+  }
+
+  return { order, purchaseAnalytics, created };
 };
 
 /** Crée la commande si le paiement est SUCCESS mais finalize n'a pas encore été appelé (confirm / IPN manquants). */

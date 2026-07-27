@@ -20,6 +20,7 @@
   "dependencies": {
     "@strapi/plugin-cloud": "5.44.0",
     "@strapi/plugin-users-permissions": "5.44.0",
+    "@strapi/provider-email-nodemailer": "^5.44.0",
     "@strapi/strapi": "5.44.0",
     "better-sqlite3": "12.8.0",
     "mysql2": "^3.22.3",

@@ -1,4 +1,5 @@
 import { finalizePaidCheckoutFromPayment } from '../../../utils/checkout-completion';
+import { notifyPaymentFailed } from '../../../utils/notify-orders';
 import { verifySycapayWebhook, type SycapayWebhookPayload } from '../../../utils/sycapay';
 
 declare const strapi: any;
@@ -124,14 +125,19 @@ export default {
     if (tag === 'SUCCESS') {
       await markSuccess(payment, idPartenaireService || undefined);
     } else if (tag === 'FAILED') {
+      const alreadyFailed = payment.status === 'FAILED';
+      const reason = String(payload.reasonForFailure ?? 'failed').slice(0, 255);
       await strapi.db.query('api::payment.payment').update({
         where: { id: payment.id },
         data: {
           status: 'FAILED',
-          errorType: String(payload.reasonForFailure ?? 'failed').slice(0, 255),
+          errorType: reason,
           ...(idPartenaireService ? { idPartenaireService } : {}),
         },
       });
+      if (!alreadyFailed) {
+        void notifyPaymentFailed(strapi, { payment: { ...payment, status: 'FAILED', errorType: reason }, reason });
+      }
     }
 
     ctx.status = 200;

@@ -2,11 +2,9 @@ import { factories } from '@strapi/strapi';
 import { randomUUID } from 'crypto';
 
 import {
-  createOrderFromCheckout,
   finalizePaidCheckout,
   loadCheckoutLineItems,
   loadUserCart,
-  recordPurchaseEvent,
 } from '../../../utils/checkout-completion';
 import {
   buildLineItemsFromRequest,
@@ -693,22 +691,11 @@ export default factories.createCoreController('api::checkout.checkout' as any, (
       return businessError(ctx, 409, 'PAYMENT_INFO_INCOMPLETE', 'Paiement non confirmé.');
     }
 
-    const order = await createOrderFromCheckout(
-      strapi,
+    const { order, purchaseAnalytics } = await finalizePaidCheckout(strapi, ctx, {
       userId,
       checkout,
-      items,
-      summary,
-      'stripe',
-      paymentIntentId,
-    );
-    const purchaseAnalytics = await recordPurchaseEvent(strapi, ctx, userId, checkout, order, summary);
-    await strapi.db.query('api::checkout.checkout').update({
-      where: { id: checkout.id },
-      data: { status: 'paid' },
-    });
-    await strapi.db.query('api::cart-item.cart-item').deleteMany({
-      where: { user: { id: userId } },
+      paymentProvider: 'stripe',
+      paymentReference: paymentIntentId,
     });
 
     ctx.body = {

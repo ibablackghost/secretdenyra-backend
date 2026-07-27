@@ -3,6 +3,10 @@ export default ({ env }: { env: (key: string, defaultValue?: string) => string }
     notifyEmail: env('PRO_ACCOUNT_REQUEST_NOTIFY_EMAIL', ''),
     adminUrl: env('STRAPI_ADMIN_URL', 'http://localhost:1337/admin'),
   },
+  orders: {
+    // Boîte qui reçoit commandes payées + paiements échoués (test prod = Gmail OK)
+    notifyEmail: env('ORDERS_NOTIFY_EMAIL', ''),
+  },
   sycapay: {
     baseUrl: env('SYCAPAY_BASE_URL', 'https://ops.sycapay.com/coresystem/part/api'),
     loginApi: env('SYCAPAY_LOGIN_API', ''),
