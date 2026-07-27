@@ -3,10 +3,26 @@ import { verifySycapayWebhook, type SycapayWebhookPayload } from '../../../utils
 
 declare const strapi: any;
 
+const UNPARSED_BODY = Symbol.for('unparsedBody');
+
 const syntheticCtx = () => ({
   state: { requestId: `sycapay_wh_${Date.now()}` },
   get: () => 'Sycapay-Webhook',
 });
+
+const resolveRawBody = (ctx: any): Buffer => {
+  const raw =
+    ctx.request?.rawBody ??
+    ctx.request?.body?.[UNPARSED_BODY] ??
+    (typeof ctx.request.body === 'string' ? ctx.request.body : null);
+
+  if (raw != null) {
+    return Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw));
+  }
+
+  // Dernier recours — peut casser HMAC si réordonnancement JSON
+  return Buffer.from(JSON.stringify(ctx.request.body ?? {}));
+};
 
 const loadPaymentByRef = async (idPartenaire: string) =>
   strapi.db.query('api::payment.payment').findOne({
@@ -14,13 +30,30 @@ const loadPaymentByRef = async (idPartenaire: string) =>
     populate: { user: true },
   });
 
-const markSuccess = async (payment: any) => {
+const loadPaymentByProviderEvent = async (idPartenaireService: string) =>
+  strapi.db.query('api::payment.payment').findOne({
+    where: { idPartenaireService },
+    populate: { user: true },
+  });
+
+const markSuccess = async (payment: any, idPartenaireService?: string) => {
+  const data: Record<string, unknown> = {};
+
   if (payment.status !== 'SUCCESS') {
+    data.status = 'SUCCESS';
+    data.errorType = null;
+  }
+
+  if (idPartenaireService && payment.idPartenaireService !== idPartenaireService) {
+    data.idPartenaireService = idPartenaireService;
+  }
+
+  if (Object.keys(data).length > 0) {
     await strapi.db.query('api::payment.payment').update({
       where: { id: payment.id },
-      data: { status: 'SUCCESS', errorType: null },
+      data,
     });
-    payment.status = 'SUCCESS';
+    Object.assign(payment, data);
   }
 
   await finalizePaidCheckoutFromPayment(strapi, payment, syntheticCtx());
@@ -28,11 +61,7 @@ const markSuccess = async (payment: any) => {
 
 export default {
   async webhook(ctx: any) {
-    const rawBody =
-      ctx.request.rawBody ??
-      (typeof ctx.request.body === 'string'
-        ? ctx.request.body
-        : Buffer.from(JSON.stringify(ctx.request.body ?? {})));
+    const rawBody = resolveRawBody(ctx);
 
     if (
       !verifySycapayWebhook({
@@ -47,10 +76,22 @@ export default {
 
     const payload = (ctx.request.body ?? {}) as SycapayWebhookPayload;
     const idPartenaire = String(payload.idPartenaire ?? '').trim();
+    const idPartenaireService = String(payload.idPartenaireService ?? '').trim();
+
     if (!idPartenaire) {
       ctx.status = 400;
       ctx.body = { ok: false, message: 'idPartenaire manquant.' };
       return;
+    }
+
+    // Idempotence dédiée : même événement Sycapay déjà traité
+    if (idPartenaireService) {
+      const byEvent = await loadPaymentByProviderEvent(idPartenaireService);
+      if (byEvent?.status === 'SUCCESS') {
+        ctx.status = 200;
+        ctx.body = { ok: true, duplicate: true };
+        return;
+      }
     }
 
     const payment = await loadPaymentByRef(idPartenaire);
@@ -63,14 +104,32 @@ export default {
 
     const tag = String(payload.tag ?? '').toUpperCase();
 
+    // Doublon SUCCESS déjà finalisé — stocke l’event id s’il manquait
+    if (tag === 'SUCCESS' && payment.status === 'SUCCESS') {
+      if (idPartenaireService && payment.idPartenaireService !== idPartenaireService) {
+        try {
+          await strapi.db.query('api::payment.payment').update({
+            where: { id: payment.id },
+            data: { idPartenaireService },
+          });
+        } catch {
+          // Conflit unique éventuel : l’événement est déjà rattaché ailleurs
+        }
+      }
+      ctx.status = 200;
+      ctx.body = { ok: true, duplicate: true };
+      return;
+    }
+
     if (tag === 'SUCCESS') {
-      await markSuccess(payment);
+      await markSuccess(payment, idPartenaireService || undefined);
     } else if (tag === 'FAILED') {
       await strapi.db.query('api::payment.payment').update({
         where: { id: payment.id },
         data: {
           status: 'FAILED',
           errorType: String(payload.reasonForFailure ?? 'failed').slice(0, 255),
+          ...(idPartenaireService ? { idPartenaireService } : {}),
         },
       });
     }

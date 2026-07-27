@@ -29,6 +29,10 @@
     "token": {
       "type": "string"
     },
+    "idPartenaireService": {
+      "type": "string",
+      "unique": true
+    },
     "status": {
       "type": "enumeration",
       "enum": ["PENDING", "SUCCESS", "CANCELED", "FAILED"],

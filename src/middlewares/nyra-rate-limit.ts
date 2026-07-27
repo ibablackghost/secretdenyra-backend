@@ -22,6 +22,20 @@ const defaultRules: RateLimitRule[] = [
     max: 10,
   },
   {
+    name: 'checkout-init',
+    pattern: /^\/api\/checkout\/init$/,
+    methods: ['POST'],
+    windowMs: 10 * 60 * 1000,
+    max: 20,
+  },
+  {
+    name: 'checkout-sycapay',
+    pattern: /^\/api\/checkout\/[^/]+\/payment\/sycapay(\/confirm-otp)?$/,
+    methods: ['POST'],
+    windowMs: 10 * 60 * 1000,
+    max: 15,
+  },
+  {
     name: 'checkout',
     pattern: /^\/api\/checkout(\/|$)/,
     methods: ['POST', 'PATCH'],

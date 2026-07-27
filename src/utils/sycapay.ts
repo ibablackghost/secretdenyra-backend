@@ -93,10 +93,16 @@ export const getSycapayConfig = (): SycapayConfig | null => {
   if (!loginApi || !mdpApi || !ca || !cert || !key) return null;
 
   const authRaw = String(process.env.SYCAPAY_WEBHOOK_AUTH ?? 'HMAC').trim().toUpperCase();
-  const webhookAuth =
+  let webhookAuth: SycapayConfig['webhookAuth'] =
     authRaw === 'NONE' || authRaw === 'BASIC' || authRaw === 'BEARER' || authRaw === 'HMAC'
       ? authRaw
       : 'HMAC';
+
+  // Prod : NONE interdit — forcer HMAC (échoue sans secret)
+  const isProd = String(process.env.NODE_ENV ?? '').toLowerCase() === 'production';
+  if (isProd && webhookAuth === 'NONE') {
+    webhookAuth = 'HMAC';
+  }
 
   return {
     baseUrl: String(process.env.SYCAPAY_BASE_URL ?? 'https://ops.sycapay.com/coresystem/part/api').replace(
@@ -427,7 +433,11 @@ export const verifySycapayWebhook = (params: {
     return Array.isArray(value) ? value[0] : value;
   };
 
-  if (config.webhookAuth === 'NONE') return true;
+  // NONE uniquement hors prod (getSycapayConfig force HMAC en production)
+  if (config.webhookAuth === 'NONE') {
+    if (String(process.env.NODE_ENV ?? '').toLowerCase() === 'production') return false;
+    return true;
+  }
 
   if (config.webhookAuth === 'BEARER') {
     const auth = String(header('authorization') ?? '');
