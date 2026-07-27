@@ -83,6 +83,13 @@ const readCertMaterial = (b64EnvKey: string, pathEnvKey: string): Buffer | null 
   return readCertFile(pathEnvKey);
 };
 
+const safeEqual = (a: string, b: string) => {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+};
+
 export const getSycapayConfig = (): SycapayConfig | null => {
   const loginApi = String(process.env.SYCAPAY_LOGIN_API ?? '').trim();
   const mdpApi = String(process.env.SYCAPAY_MDP_API ?? '').trim();
@@ -92,17 +99,7 @@ export const getSycapayConfig = (): SycapayConfig | null => {
 
   if (!loginApi || !mdpApi || !ca || !cert || !key) return null;
 
-  const authRaw = String(process.env.SYCAPAY_WEBHOOK_AUTH ?? 'HMAC').trim().toUpperCase();
-  let webhookAuth: SycapayConfig['webhookAuth'] =
-    authRaw === 'NONE' || authRaw === 'BASIC' || authRaw === 'BEARER' || authRaw === 'HMAC'
-      ? authRaw
-      : 'HMAC';
-
-  // Prod : NONE interdit — forcer HMAC (échoue sans secret)
-  const isProd = String(process.env.NODE_ENV ?? '').toLowerCase() === 'production';
-  if (isProd && webhookAuth === 'NONE') {
-    webhookAuth = 'HMAC';
-  }
+  const webhook = getSycapayWebhookSettings();
 
   return {
     baseUrl: String(process.env.SYCAPAY_BASE_URL ?? 'https://ops.sycapay.com/coresystem/part/api').replace(
@@ -116,9 +113,123 @@ export const getSycapayConfig = (): SycapayConfig | null => {
     key,
     successUrl: String(process.env.SYCAPAY_SUCCESS_URL ?? '').trim(),
     failedUrl: String(process.env.SYCAPAY_FAILED_URL ?? '').trim(),
+    webhookAuth: webhook.webhookAuth,
+    webhookSecret: webhook.webhookSecret,
+  };
+};
+
+/** Webhook seul — ne dépend pas des certificats mTLS (sinon 403 si certs absents). */
+export const getSycapayWebhookSettings = () => {
+  const authRaw = String(process.env.SYCAPAY_WEBHOOK_AUTH ?? 'HMAC').trim().toUpperCase();
+  let webhookAuth: SycapayConfig['webhookAuth'] =
+    authRaw === 'NONE' || authRaw === 'BASIC' || authRaw === 'BEARER' || authRaw === 'HMAC'
+      ? authRaw
+      : 'HMAC';
+
+  const isProd = String(process.env.NODE_ENV ?? '').toLowerCase() === 'production';
+  if (isProd && webhookAuth === 'NONE') {
+    webhookAuth = 'HMAC';
+  }
+
+  return {
     webhookAuth,
     webhookSecret: String(process.env.SYCAPAY_WEBHOOK_SECRET ?? '').trim(),
   };
+};
+
+const resolveSignatureHeader = (headers: Record<string, string | string[] | undefined>) => {
+  const pick = (name: string) => {
+    const value = headers[name] ?? headers[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value;
+  };
+
+  return String(
+    pick('x-sycapay-signature') ??
+      pick('X-Sycapay-Signature') ??
+      pick('x-signature') ??
+      pick('X-Signature') ??
+      '',
+  ).trim();
+};
+
+/** Aligné doc Sycapay : header `sha256=<hex>`, HMAC-SHA256 du body brut. */
+export const verifySycapayWebhookHmac = (body: Buffer, signatureHeader: string, secret: string): boolean => {
+  if (!secret || !signatureHeader) return false;
+
+  const [algoRaw, sent] = signatureHeader.includes('=')
+    ? signatureHeader.split('=', 2)
+    : ['sha256', signatureHeader];
+
+  const sentDigest = String(sent ?? '').trim().toLowerCase();
+  if (!sentDigest) return false;
+
+  // Doc officielle : algo dans le header mais digest toujours SHA256
+  const digest = createHmac('sha256', secret).update(body).digest('hex');
+
+  if (safeEqual(sentDigest, digest)) return true;
+
+  // Option doc : SHA512 si l'algo du header le demande explicitement
+  if (algoRaw.toLowerCase().includes('512')) {
+    const digest512 = createHmac('sha512', secret).update(body).digest('hex');
+    return safeEqual(sentDigest, digest512);
+  }
+
+  return false;
+};
+
+export type SycapayWebhookVerifyResult =
+  | { ok: true }
+  | { ok: false; reason: 'missing_secret' | 'missing_signature' | 'invalid_hmac' | 'unsupported_auth' };
+
+export const verifySycapayWebhookDetailed = (params: {
+  rawBody: Buffer | string;
+  headers: Record<string, string | string[] | undefined>;
+}): SycapayWebhookVerifyResult => {
+  const settings = getSycapayWebhookSettings();
+
+  if (settings.webhookAuth === 'NONE') {
+    if (String(process.env.NODE_ENV ?? '').toLowerCase() === 'production') {
+      return { ok: false, reason: 'unsupported_auth' };
+    }
+    return { ok: true };
+  }
+
+  if (!settings.webhookSecret) {
+    return { ok: false, reason: 'missing_secret' };
+  }
+
+  const header = (name: string) => {
+    const value = params.headers[name] ?? params.headers[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value;
+  };
+
+  if (settings.webhookAuth === 'BEARER') {
+    const auth = String(header('authorization') ?? '');
+    return safeEqual(auth, `Bearer ${settings.webhookSecret}`)
+      ? { ok: true }
+      : { ok: false, reason: 'invalid_hmac' };
+  }
+
+  if (settings.webhookAuth === 'BASIC') {
+    const auth = String(header('authorization') ?? '');
+    const expected = `Basic ${Buffer.from(settings.webhookSecret).toString('base64')}`;
+    const ok =
+      safeEqual(auth, expected) ||
+      (auth.startsWith('Basic ') &&
+        settings.webhookSecret.includes(':') &&
+        safeEqual(auth, `Basic ${Buffer.from(settings.webhookSecret).toString('base64')}`)) ||
+      safeEqual(auth, `Basic ${settings.webhookSecret}`);
+    return ok ? { ok: true } : { ok: false, reason: 'invalid_hmac' };
+  }
+
+  const signatureHeader = resolveSignatureHeader(params.headers);
+  if (!signatureHeader) {
+    return { ok: false, reason: 'missing_signature' };
+  }
+
+  const body = Buffer.isBuffer(params.rawBody) ? params.rawBody : Buffer.from(params.rawBody);
+  const ok = verifySycapayWebhookHmac(body, signatureHeader, settings.webhookSecret);
+  return ok ? { ok: true } : { ok: false, reason: 'invalid_hmac' };
 };
 
 export const buildIdPartenaire = (checkoutId: string) => {
@@ -406,13 +517,6 @@ export const mapSycapayRemoteStatus = (remote: Record<string, unknown> | null) =
   return 'PENDING';
 };
 
-const safeEqual = (a: string, b: string) => {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-};
-
 export type SycapayWebhookPayload = {
   idPartenaire?: string;
   idPartenaireService?: string;
@@ -424,48 +528,4 @@ export type SycapayWebhookPayload = {
 export const verifySycapayWebhook = (params: {
   rawBody: Buffer | string;
   headers: Record<string, string | string[] | undefined>;
-}): boolean => {
-  const config = getSycapayConfig();
-  if (!config) return false;
-
-  const header = (name: string) => {
-    const value = params.headers[name] ?? params.headers[name.toLowerCase()];
-    return Array.isArray(value) ? value[0] : value;
-  };
-
-  // NONE uniquement hors prod (getSycapayConfig force HMAC en production)
-  if (config.webhookAuth === 'NONE') {
-    if (String(process.env.NODE_ENV ?? '').toLowerCase() === 'production') return false;
-    return true;
-  }
-
-  if (config.webhookAuth === 'BEARER') {
-    const auth = String(header('authorization') ?? '');
-    if (!config.webhookSecret) return false;
-    return safeEqual(auth, `Bearer ${config.webhookSecret}`);
-  }
-
-  if (config.webhookAuth === 'BASIC') {
-    const auth = String(header('authorization') ?? '');
-    if (!config.webhookSecret) return false;
-    const expected = `Basic ${Buffer.from(config.webhookSecret).toString('base64')}`;
-    // secret format login:password stored as-is in env, or already "login:password"
-    if (auth.startsWith('Basic ') && config.webhookSecret.includes(':')) {
-      return safeEqual(auth, `Basic ${Buffer.from(config.webhookSecret).toString('base64')}`);
-    }
-    return safeEqual(auth, expected) || safeEqual(auth, `Basic ${config.webhookSecret}`);
-  }
-
-  // HMAC
-  if (!config.webhookSecret) return false;
-  const signatureHeader = String(header('x-sycapay-signature') ?? header('X-Sycapay-Signature') ?? '');
-  if (!signatureHeader) return false;
-
-  const body = Buffer.isBuffer(params.rawBody) ? params.rawBody : Buffer.from(params.rawBody);
-  const [algoRaw, sent] = signatureHeader.includes('=')
-    ? signatureHeader.split('=', 2)
-    : ['sha256', signatureHeader];
-  const algo = algoRaw.toLowerCase().includes('512') ? 'sha512' : 'sha256';
-  const digest = createHmac(algo, config.webhookSecret).update(body).digest('hex');
-  return safeEqual(digest, String(sent).trim());
-};
+}): boolean => verifySycapayWebhookDetailed(params).ok;

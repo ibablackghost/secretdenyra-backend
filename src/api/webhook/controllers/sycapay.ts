@@ -1,6 +1,9 @@
 import { finalizePaidCheckoutFromPayment } from '../../../utils/checkout-completion';
 import { notifyPaymentFailed } from '../../../utils/notify-orders';
-import { verifySycapayWebhook, type SycapayWebhookPayload } from '../../../utils/sycapay';
+import {
+  verifySycapayWebhookDetailed,
+  type SycapayWebhookPayload,
+} from '../../../utils/sycapay';
 
 declare const strapi: any;
 
@@ -64,14 +67,24 @@ export default {
   async webhook(ctx: any) {
     const rawBody = resolveRawBody(ctx);
 
-    if (
-      !verifySycapayWebhook({
-        rawBody,
-        headers: ctx.request.headers ?? {},
-      })
-    ) {
+    const verification = verifySycapayWebhookDetailed({
+      rawBody,
+      headers: ctx.request.headers ?? {},
+    });
+
+    if (verification.ok === false) {
+      strapi.log.warn('[sycapay-webhook] signature refusée', {
+        reason: verification.reason,
+        hasRawBody: rawBody.length > 0,
+        rawBodyBytes: rawBody.length,
+        signatureHeader: String(
+          ctx.request.headers?.['x-sycapay-signature'] ??
+            ctx.request.headers?.['X-Sycapay-Signature'] ??
+            '',
+        ).slice(0, 20),
+      });
       ctx.status = 403;
-      ctx.body = { ok: false, message: 'Webhook signature invalide.' };
+      ctx.body = { ok: false, message: 'Webhook signature invalide.', reason: verification.reason };
       return;
     }
 
