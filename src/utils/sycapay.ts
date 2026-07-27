@@ -118,6 +118,11 @@ export const getSycapayConfig = (): SycapayConfig | null => {
   };
 };
 
+const normalizeWebhookSecret = (value: string) =>
+  String(value ?? '')
+    .trim()
+    .replace(/^["']|["']$/g, '');
+
 /** Webhook seul — ne dépend pas des certificats mTLS (sinon 403 si certs absents). */
 export const getSycapayWebhookSettings = () => {
   const authRaw = String(process.env.SYCAPAY_WEBHOOK_AUTH ?? 'HMAC').trim().toUpperCase();
@@ -133,7 +138,7 @@ export const getSycapayWebhookSettings = () => {
 
   return {
     webhookAuth,
-    webhookSecret: String(process.env.SYCAPAY_WEBHOOK_SECRET ?? '').trim(),
+    webhookSecret: normalizeWebhookSecret(process.env.SYCAPAY_WEBHOOK_SECRET ?? ''),
   };
 };
 
@@ -143,13 +148,33 @@ const resolveSignatureHeader = (headers: Record<string, string | string[] | unde
     return Array.isArray(value) ? value[0] : value;
   };
 
-  return String(
+  const direct = String(
     pick('x-sycapay-signature') ??
       pick('X-Sycapay-Signature') ??
       pick('x-signature') ??
       pick('X-Signature') ??
+      pick('x-webhook-signature') ??
+      pick('X-Webhook-Signature') ??
       '',
   ).trim();
+
+  if (direct) return direct;
+
+  // Fallback : tout header contenant "signature"
+  for (const [name, value] of Object.entries(headers)) {
+    if (!name.toLowerCase().includes('signature')) continue;
+    const raw = Array.isArray(value) ? value[0] : value;
+    if (raw) return String(raw).trim();
+  }
+
+  // Authorization: sha256=... ou HMAC sha256=...
+  const auth = String(pick('authorization') ?? '').trim();
+  if (/sha(?:256|512)\s*=/i.test(auth)) {
+    const match = auth.match(/sha(?:256|512)\s*=\s*([a-f0-9]+)/i);
+    if (match) return `sha256=${match[1]}`;
+  }
+
+  return '';
 };
 
 /** Aligné doc Sycapay : header `sha256=<hex>`, HMAC-SHA256 du body brut. */

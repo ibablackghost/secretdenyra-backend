@@ -51,14 +51,13 @@ const config: Core.Config.Middlewares = [
   },
   'strapi::poweredBy',
   'strapi::query',
+  'global::nyra-sycapay-raw-body-capture',
   {
     name: 'strapi::body',
     config: {
-      // Requis pour HMAC webhook Sycapay (body brut → Symbol.for('unparsedBody'))
       includeUnparsed: true,
     },
   },
-  'global::nyra-sycapay-raw-body',
   'global::nyra-rate-limit',
   'global::nyra-cache-control',
   'strapi::session',

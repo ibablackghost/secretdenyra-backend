@@ -16,6 +16,7 @@ const syntheticCtx = () => ({
 
 const resolveRawBody = (ctx: any): Buffer => {
   const raw =
+    ctx.state?.sycapayRawBody ??
     ctx.request?.rawBody ??
     ctx.request?.body?.[UNPARSED_BODY] ??
     (typeof ctx.request.body === 'string' ? ctx.request.body : null);
@@ -24,9 +25,13 @@ const resolveRawBody = (ctx: any): Buffer => {
     return Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw));
   }
 
-  // Dernier recours — peut casser HMAC si réordonnancement JSON
   return Buffer.from(JSON.stringify(ctx.request.body ?? {}));
 };
+
+const listSignatureHeaders = (headers: Record<string, unknown>) =>
+  Object.entries(headers)
+    .filter(([name]) => name.toLowerCase().includes('sign') || name.toLowerCase() === 'authorization')
+    .map(([name, value]) => `${name}=${String(Array.isArray(value) ? value[0] : value).slice(0, 24)}`);
 
 const loadPaymentByRef = async (idPartenaire: string) =>
   strapi.db.query('api::payment.payment').findOne({
@@ -73,22 +78,20 @@ export default {
     });
 
     if (verification.ok === false) {
-      strapi.log.warn('[sycapay-webhook] signature refusée', {
-        reason: verification.reason,
-        hasRawBody: rawBody.length > 0,
-        rawBodyBytes: rawBody.length,
-        signatureHeader: String(
-          ctx.request.headers?.['x-sycapay-signature'] ??
-            ctx.request.headers?.['X-Sycapay-Signature'] ??
-            '',
-        ).slice(0, 20),
-      });
+      strapi.log.warn(
+        `[sycapay-webhook] signature refusée (${verification.reason}) raw=${rawBody.length}b headers=${listSignatureHeaders(ctx.request.headers ?? {}).join(',') || 'none'}`,
+      );
       ctx.status = 403;
       ctx.body = { ok: false, message: 'Webhook signature invalide.', reason: verification.reason };
       return;
     }
 
-    const payload = (ctx.request.body ?? {}) as SycapayWebhookPayload;
+    let payload: SycapayWebhookPayload;
+    try {
+      payload = JSON.parse(rawBody.toString('utf8')) as SycapayWebhookPayload;
+    } catch {
+      payload = (ctx.request.body ?? {}) as SycapayWebhookPayload;
+    }
     const idPartenaire = String(payload.idPartenaire ?? '').trim();
     const idPartenaireService = String(payload.idPartenaireService ?? '').trim();
 
