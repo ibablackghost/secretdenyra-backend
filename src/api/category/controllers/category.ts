@@ -76,15 +76,19 @@ export default factories.createCoreController('api::category.category', ({ strap
 
   async find(ctx) {
     const locale = resolveCatalogLocale(ctx.query as AnyRecord);
-    await super.find(ctx);
+    const result = await super.find(ctx);
+    const localized = localizeCoreCategoryPayload((ctx.body ?? result) as AnyRecord, locale);
     ctx.set('X-Content-Locale', locale);
-    ctx.body = localizeCoreCategoryPayload(ctx.body as AnyRecord, locale);
+    ctx.body = localized;
+    return localized;
   },
 
   async findOne(ctx) {
     const locale = resolveCatalogLocale(ctx.query as AnyRecord);
-    await super.findOne(ctx);
+    const result = await super.findOne(ctx);
+    const localized = localizeCoreCategoryPayload((ctx.body ?? result) as AnyRecord, locale);
     ctx.set('X-Content-Locale', locale);
-    ctx.body = localizeCoreCategoryPayload(ctx.body as AnyRecord, locale);
+    ctx.body = localized;
+    return localized;
   },
 }));

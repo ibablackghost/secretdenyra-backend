@@ -463,9 +463,12 @@ export default factories.createCoreController('api::product.product', ({ strapi 
       ctx.query.pagination = { page: 1, pageSize: 24 };
     }
 
-    await super.find(ctx);
+    const result = await super.find(ctx);
+    const payload = (ctx.body ?? result) as AnyRecord;
+    const localized = localizeCoreProductPayload(payload, locale);
     ctx.set('X-Content-Locale', locale);
-    ctx.body = localizeCoreProductPayload(ctx.body as AnyRecord, locale);
+    ctx.body = localized;
+    return localized;
   },
 
   async findOne(ctx) {
@@ -479,8 +482,11 @@ export default factories.createCoreController('api::product.product', ({ strapi 
       ctx.query.fields = [...SAFE_PRODUCT_FIELDS];
     }
 
-    await super.findOne(ctx);
+    const result = await super.findOne(ctx);
+    const payload = (ctx.body ?? result) as AnyRecord;
+    const localized = localizeCoreProductPayload(payload, locale);
     ctx.set('X-Content-Locale', locale);
-    ctx.body = localizeCoreProductPayload(ctx.body as AnyRecord, locale);
+    ctx.body = localized;
+    return localized;
   },
 }));

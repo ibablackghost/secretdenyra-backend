@@ -28,15 +28,19 @@ const localizeCoreTagPayload = (payload: AnyRecord, locale: 'fr' | 'en') => {
 export default factories.createCoreController('api::tag.tag', () => ({
   async find(ctx) {
     const locale = resolveCatalogLocale(ctx.query as AnyRecord);
-    await super.find(ctx);
+    const result = await super.find(ctx);
+    const localized = localizeCoreTagPayload((ctx.body ?? result) as AnyRecord, locale);
     ctx.set('X-Content-Locale', locale);
-    ctx.body = localizeCoreTagPayload(ctx.body as AnyRecord, locale);
+    ctx.body = localized;
+    return localized;
   },
 
   async findOne(ctx) {
     const locale = resolveCatalogLocale(ctx.query as AnyRecord);
-    await super.findOne(ctx);
+    const result = await super.findOne(ctx);
+    const localized = localizeCoreTagPayload((ctx.body ?? result) as AnyRecord, locale);
     ctx.set('X-Content-Locale', locale);
-    ctx.body = localizeCoreTagPayload(ctx.body as AnyRecord, locale);
+    ctx.body = localized;
+    return localized;
   },
 }));
