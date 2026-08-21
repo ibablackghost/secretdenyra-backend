@@ -2,7 +2,6 @@ import type { Core } from '@strapi/strapi';
 
 import importController from './api/product/controllers/import';
 import { ensureNyraDbIndexes } from './bootstrap/db-indexes';
-import { ensureNyraLocales } from './bootstrap/nyra-locales';
 import { seedNyraCatalog } from './bootstrap/nyra-catalog';
 import { registerBackofficeCommerceViews } from './utils/backoffice-commerce-views';
 
@@ -26,7 +25,6 @@ export default {
   },
 
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
-    await ensureNyraLocales(strapi);
     await ensureNyraDbIndexes(strapi);
     await seedNyraCatalog(strapi);
   },

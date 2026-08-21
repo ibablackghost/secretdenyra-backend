@@ -9,85 +9,52 @@
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {
-    "i18n": {
-      "localized": true
-    }
-  },
+  "pluginOptions": {},
   "attributes": {
     "name": {
       "type": "string",
-      "required": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "required": true
+    },
+    "nameEn": {
+      "type": "string"
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
       "required": true,
-      "unique": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "unique": true
     },
     "image": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images"],
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "allowedTypes": ["images"]
     },
     "metaTitle": {
       "type": "string",
-      "maxLength": 70,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "maxLength": 70
+    },
+    "metaTitleEn": {
+      "type": "string",
+      "maxLength": 70
     },
     "metaDescription": {
       "type": "text",
-      "maxLength": 180,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "maxLength": 180
+    },
+    "metaDescriptionEn": {
+      "type": "text",
+      "maxLength": 180
     },
     "canonicalUrl": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "canonicalPath": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "ogImage": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images"],
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "allowedTypes": ["images"]
     },
     "products": {
       "type": "relation",

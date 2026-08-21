@@ -10,260 +10,153 @@
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {
-    "i18n": {
-      "localized": true
-    }
-  },
+  "pluginOptions": {},
   "attributes": {
     "name": {
       "type": "string",
-      "required": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "required": true
+    },
+    "nameEn": {
+      "type": "string"
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
       "required": true,
-      "unique": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "unique": true
     },
     "ingredients": {
       "type": "text",
-      "required": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "required": true
+    },
+    "ingredientsEn": {
+      "type": "text"
     },
     "shortDescription": {
-      "type": "text",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "text"
+    },
+    "shortDescriptionEn": {
+      "type": "text"
     },
     "description": {
-      "type": "richtext",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "richtext"
+    },
+    "descriptionEn": {
+      "type": "richtext"
     },
     "dosage": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "dosageEn": {
+      "type": "string"
     },
     "infusionTime": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "infusionTimeEn": {
+      "type": "string"
     },
     "temperature": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "temperatureEn": {
+      "type": "string"
     },
     "origin": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "originEn": {
+      "type": "string"
     },
     "botanicalName": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "sourceUrl": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "price": {
       "type": "integer",
       "required": true,
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "compareAtPrice": {
       "type": "integer",
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "rating": {
       "type": "decimal",
       "required": true,
-      "default": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "default": 0
     },
     "reviews": {
       "type": "integer",
       "required": true,
       "default": 0,
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "metaTitle": {
       "type": "string",
-      "maxLength": 70,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "maxLength": 70
+    },
+    "metaTitleEn": {
+      "type": "string",
+      "maxLength": 70
     },
     "metaDescription": {
       "type": "text",
-      "maxLength": 180,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "maxLength": 180
+    },
+    "metaDescriptionEn": {
+      "type": "text",
+      "maxLength": 180
     },
     "canonicalUrl": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "canonicalPath": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "ogImage": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images"],
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "allowedTypes": ["images"]
     },
     "bgClass": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "image": {
       "type": "media",
       "multiple": false,
       "required": false,
-      "allowedTypes": ["images"],
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "allowedTypes": ["images"]
     },
     "imageUrl": {
       "type": "string",
-      "required": false,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "required": false
     },
     "gallery": {
       "type": "media",
       "multiple": true,
-      "allowedTypes": ["images"],
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "allowedTypes": ["images"]
     },
     "category": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::category.category",
       "required": true,
-      "inversedBy": "products",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "inversedBy": "products"
     },
     "tags": {
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::tag.tag",
-      "inversedBy": "products",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "inversedBy": "products"
     },
     "variants": {
       "type": "relation",
       "relation": "oneToMany",
       "target": "api::variant.variant",
-      "mappedBy": "product",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "mappedBy": "product"
     }
   }
 }

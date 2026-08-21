@@ -10,169 +10,95 @@
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {
-    "i18n": {
-      "localized": true
-    }
-  },
+  "pluginOptions": {},
   "attributes": {
     "name": {
       "type": "string",
-      "required": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "required": true
+    },
+    "nameEn": {
+      "type": "string"
     },
     "sku": {
       "type": "string",
       "required": true,
-      "unique": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "unique": true
     },
     "format": {
       "type": "string",
-      "required": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "required": true
+    },
+    "formatEn": {
+      "type": "string"
     },
     "label": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "labelEn": {
+      "type": "string"
     },
     "size": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "sizeEn": {
+      "type": "string"
     },
     "colorName": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "type": "string"
+    },
+    "colorNameEn": {
+      "type": "string"
     },
     "colorHex": {
-      "type": "string",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "type": "string"
     },
     "weightValue": {
       "type": "decimal",
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "weightUnit": {
       "type": "enumeration",
       "enum": ["g", "kg", "ml", "l", "piece"],
-      "default": "g",
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "default": "g"
     },
     "price": {
       "type": "integer",
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "compareAtPrice": {
       "type": "integer",
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "stock": {
       "type": "integer",
       "required": true,
       "default": 0,
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "lowStockThreshold": {
       "type": "integer",
       "default": 5,
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "isDefault": {
       "type": "boolean",
-      "default": false,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "default": false
     },
     "isActive": {
       "type": "boolean",
-      "default": true,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "default": true
     },
     "position": {
       "type": "integer",
       "default": 0,
-      "min": 0,
-      "pluginOptions": {
-        "i18n": {
-          "localized": false
-        }
-      }
+      "min": 0
     },
     "product": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::product.product",
       "required": true,
-      "inversedBy": "variants",
-      "pluginOptions": {
-        "i18n": {
-          "localized": true
-        }
-      }
+      "inversedBy": "variants"
     }
   }
 }
